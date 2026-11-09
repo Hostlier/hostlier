@@ -31,7 +31,7 @@ const notices = [];
 for (const [path, pkg] of Object.entries(lock.packages)) {
   if (!path || pkg.dev) continue;
   const files = (await readdir(join(source, path))).filter(name => /^(licen[cs]e|notice)(\..*)?$/i.test(name)).sort();
-  for (const name of files) notices.push(path.replace(/^node_modules\//, '') + '@' + pkg.version + ' — ' + name + '\n\n' + (await readFile(join(source, path, name), 'utf8')).trimEnd());
+  for (const name of files) notices.push(path.replace(/^node_modules\//, '') + '@' + pkg.version + ' — ' + name + '\n\n' + (await readFile(join(source, path, name), 'utf8')).replace(/\r\n/g, '\n').trimEnd());
 }
 await writeFile(join(target, 'THIRD-PARTY-NOTICES'), notices.join('\n\n') + '\n');
 await copyFile(join(source, 'node_modules/yaml/LICENSE'), join(target, 'YAML-LICENSE'));
