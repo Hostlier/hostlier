@@ -1,0 +1,9 @@
+version: 1
+app: analytics
+name: primary
+engine: mongodb
+mode: new-database
+database: analytics
+collection: events
+connectionSecret: shared-railway-mongodb-admin-url
+outputSecret: analytics-database-url

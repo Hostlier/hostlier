@@ -1,0 +1,17 @@
+{
+  "entry": "app.ts",
+  "ui": {
+    "entry": "ui.tsx",
+    "title": "Minion \u00b7 Stocks"
+  },
+  "outdir": "../../../../.hosting/minion-stocks/build-2",
+  "name": "minion-stocks",
+  "image": "127.0.0.1:5050/minion-stocks:0.1.1",
+  "baseImage": "node:24.21.0-bookworm-slim",
+  "route": "stocks.apps.minion.test",
+  "fused": {
+    "grpcUrl": "https://eng.usefused.com",
+    "appId": "42bb1a78-2451-5052-b3ed-a66a8c83a8fa",
+    "tokenSecret": "minion-stocks-engine-token"
+  }
+}

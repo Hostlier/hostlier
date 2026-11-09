@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Hostlier · Overview</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="/overview" data-route aria-label="Hostlier home">
+        <svg viewBox="0 0 28 28" fill="none" aria-hidden="true"><rect width="28" height="28" rx="7" fill="currentColor"/><path d="M8 6.5V21h3v-6.5a3 3 0 0 1 6 0V21h3v-6.5a6 6 0 0 0-9-5.2V6.5H8Z" fill="white"/></svg>
+        <span>hostlier</span><span class="local-cli-label">LOCAL CLI</span>
+      </a>
+      <span class="header-divider" aria-hidden="true"></span>
+      <div class="server-select"><span class="server-symbol" aria-hidden="true">▱</span><span id="server">Connecting…</span><span id="runtime" class="runtime-label">Waiting for controller</span></div>
+      <button id="manage-connection" class="button" type="button">Connection <span aria-hidden="true">↗</span></button>
+      <div class="connection"><span id="connection-dot" class="status-dot"></span><span id="connection" role="status" aria-live="polite" aria-atomic="true">Connecting</span></div>
+    </div>
+  </header>
+  <div class="workspace-layout">
+    <aside class="sidebar">
+      <button id="navigation-toggle" class="navigation-toggle" type="button" aria-expanded="false" aria-controls="dashboard-navigation"><span id="current-section">Overview</span><span>Browse pages <span aria-hidden="true">⌄</span></span></button>
+      <nav id="dashboard-navigation" class="navigation" aria-label="Dashboard"></nav>
+      <p class="sidebar-note">Open an app to see its metrics and logs.</p>
+    </aside>
+  <main id="content" tabindex="-1">
+    <div id="breadcrumbs" class="breadcrumbs" hidden></div>
+    <section class="page-heading" aria-labelledby="page-title">
+      <div><span class="eyebrow" id="page-section">Monitor</span><h1 id="page-title">Overview</h1><p id="page-description">A clear view of your server.</p></div>
+      <div class="capture"><span class="capture-label">Last updated</span><time id="captured">Waiting for data</time><span class="capture-caption" id="capture-status">Updates automatically</span></div>
+    </section>
+    <div id="notice" class="notice" role="status" aria-live="polite" aria-atomic="true">Connecting to your controller…</div>
+    <section id="link-panel" class="link-panel" hidden aria-labelledby="link-title">
+      <div class="section-heading"><div><h2 id="link-title">Connect your controller</h2><p>This dashboard runs in your local CLI. Connect to the controller on your server.</p></div><button id="close-link" class="button" type="button">Close</button></div>
+      <div id="saved-connections" hidden><label class="field-label" for="profile-select">Saved controllers</label><div class="saved-controls"><select id="profile-select"></select><button id="select-profile" class="button" type="button">Connect</button></div><div class="form-divider">or link a new controller</div></div>
+      <form id="link-form" class="link-form">
+        <label class="field-label">Controller HTTPS URL<input id="controller-url" name="url" type="url" placeholder="https://hostlier.example.com" required autocomplete="url"></label>
+        <label class="field-label">Profile name<input id="controller-name" name="name" placeholder="production" pattern="[A-Za-z0-9_-]{1,64}" maxlength="64" required autocomplete="off"></label>
+        <button id="link-controller" class="button button-primary" type="submit">Link controller <span aria-hidden="true">→</span></button>
+      </form>
+      <p id="link-feedback" class="link-feedback" role="status">The controller administrator will approve this device before it connects.</p>
+      <div id="pairing-request" class="pairing-request" hidden><span class="eyebrow">ON YOUR CONTROLLER</span><p>Review and approve this device from a trusted server terminal:</p><code id="pairing-command"></code><p id="pairing-expiry"></p></div>
+    </section>
+    <div id="page-content"></div>
+    <footer><span class="footer-brand">hostlier <span class="footer-divider">/</span> Controller dashboard</span><span>Runs on your computer<span class="footer-dot" aria-hidden="true">·</span>Work continues when you close this view</span></footer>
+  </main>
+  </div>
+</body>
+</html>

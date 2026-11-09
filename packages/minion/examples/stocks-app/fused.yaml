@@ -1,0 +1,12 @@
+apiVersion: fused/v1
+kind: sdk
+name: minion-stocks
+version: 1.0.0
+language: typescript
+bucket: default
+generate: true
+services:
+    minion-alpha-vantage:
+        version: 1.0.0
+        operations:
+            - getStockData

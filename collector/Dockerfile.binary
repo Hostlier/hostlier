@@ -1,0 +1,9 @@
+# Reuse the baseline's verified public trust bundle when packaging a laptop build.
+FROM otel/opentelemetry-collector-contrib:0.164.0@sha256:340c9ca6a36617084c6661bdc4f0fe92b7cda5a805d61673ec8db375fddc522b AS trust
+FROM scratch
+ARG TARGETARCH
+COPY --from=trust /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY dist/hostlier-collector-linux-${TARGETARCH} /hostlier-collector
+USER 0:0
+ENTRYPOINT ["/hostlier-collector"]
+CMD ["--config=/etc/otelcol/collector.yaml"]

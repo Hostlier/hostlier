@@ -1,0 +1,13 @@
+version: 1
+app: analytics
+name: primary
+engine: postgres
+mode: new-instance
+database: analytics
+outputSecret: analytics-database-url
+instance:
+  tokenSecret: aiven-api-token
+  project: your-aiven-project
+  service: analytics-postgres
+  plan: your-reviewed-plan
+  cloud: your-reviewed-cloud-region

@@ -1,0 +1,17 @@
+# Credentials belong in Hostlier secret references, not in this reviewed file.
+database:
+  max_conns: 4
+server:
+  http_port: "8081"
+  grpc_host: "0.0.0.0"
+  grpc_port: "50051"
+nats:
+  store_dir: /app/data/nats
+engine:
+  unified_apps:
+    max_concurrency: 1
+    queue_capacity: 32
+    queue_timeout_seconds: 5
+observability:
+  environment: production
+  service_name: fused-engine

@@ -1,0 +1,21 @@
+{
+  "mode": "nginx-gateway",
+  "engineHealth": "ok",
+  "engineWorkersReady": true,
+  "engineStatus": "running",
+  "engineRevision": "82ed486832a6b7e495abea5e5c0a971c70285febc679260caa1bc50df19077e8",
+  "fixtureStatus": "running",
+  "fixtureRevision": "acffd744ab65a37c80af29dc987ab04874fd88b2a821d6e8c5ee4c6397112295",
+  "originalDatabaseRuntimeRetained": true,
+  "operation": "acffd744ab65a37c80af29dc987ab04874fd88b2a821d6e8c5ee4c6397112295",
+  "servicesActive": [
+    "active",
+    "active",
+    "active"
+  ],
+  "privateHTTP1": true,
+  "privateH2": true,
+  "publicAuthorityPreserved": true,
+  "publicSchemePreserved": true,
+  "frontendUsesPrivateNginx": true
+}

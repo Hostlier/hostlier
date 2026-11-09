@@ -1,0 +1,974 @@
+{
+  "resourceLogs": [
+    {
+      "resource": {
+        "attributes": [
+          {
+            "key": "k8s.container.restart_count",
+            "value": {
+              "stringValue": "0"
+            }
+          },
+          {
+            "key": "k8s.namespace.name",
+            "value": {
+              "stringValue": "hostlier-collector-test-workload"
+            }
+          },
+          {
+            "key": "k8s.pod.name",
+            "value": {
+              "stringValue": "worker"
+            }
+          },
+          {
+            "key": "k8s.pod.uid",
+            "value": {
+              "stringValue": "11111111-2222-3333-4444-555555555555"
+            }
+          },
+          {
+            "key": "k8s.container.name",
+            "value": {
+              "stringValue": "helper"
+            }
+          },
+          {
+            "key": "k8s.node.name",
+            "value": {
+              "stringValue": "fixture-node"
+            }
+          },
+          {
+            "key": "hostlier.application",
+            "value": {
+              "stringValue": "collector-fixture"
+            }
+          },
+          {
+            "key": "hostlier.runtime_revision",
+            "value": {
+              "stringValue": "fixture-revision"
+            }
+          }
+        ]
+      },
+      "scopeLogs": [
+        {
+          "scope": {
+            "name": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/filelogreceiver",
+            "version": "0.164.0"
+          },
+          "logRecords": [
+            {
+              "timeUnixNano": "1793291262011431259",
+              "observedTimeUnixNano": "1793291262120576895",
+              "body": {
+                "stringValue": "hostlier-k3s-sidecar-fixture"
+              },
+              "attributes": [
+                {
+                  "key": "log.file.name",
+                  "value": {
+                    "stringValue": "0.log"
+                  }
+                },
+                {
+                  "key": "log.file.path",
+                  "value": {
+                    "stringValue": "/var/log/pods/hostlier-collector-test-workload_worker_11111111-2222-3333-4444-555555555555/helper/0.log"
+                  }
+                },
+                {
+                  "key": "log.iostream",
+                  "value": {
+                    "stringValue": "stdout"
+                  }
+                },
+                {
+                  "key": "logtag",
+                  "value": {
+                    "stringValue": "F"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "resource": {
+        "attributes": [
+          {
+            "key": "k8s.pod.name",
+            "value": {
+              "stringValue": "worker"
+            }
+          },
+          {
+            "key": "k8s.pod.uid",
+            "value": {
+              "stringValue": "11111111-2222-3333-4444-555555555555"
+            }
+          },
+          {
+            "key": "k8s.container.name",
+            "value": {
+              "stringValue": "main"
+            }
+          },
+          {
+            "key": "k8s.container.restart_count",
+            "value": {
+              "stringValue": "0"
+            }
+          },
+          {
+            "key": "k8s.namespace.name",
+            "value": {
+              "stringValue": "hostlier-collector-test-workload"
+            }
+          },
+          {
+            "key": "hostlier.runtime_revision",
+            "value": {
+              "stringValue": "fixture-revision"
+            }
+          },
+          {
+            "key": "k8s.node.name",
+            "value": {
+              "stringValue": "fixture-node"
+            }
+          },
+          {
+            "key": "hostlier.application",
+            "value": {
+              "stringValue": "collector-fixture"
+            }
+          }
+        ]
+      },
+      "scopeLogs": [
+        {
+          "scope": {
+            "name": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/filelogreceiver",
+            "version": "0.164.0"
+          },
+          "logRecords": [
+            {
+              "timeUnixNano": "1793291261981065661",
+              "observedTimeUnixNano": "1793291262120568288",
+              "body": {
+                "stringValue": "hostlier-k3s-log-fixture"
+              },
+              "attributes": [
+                {
+                  "key": "log.file.path",
+                  "value": {
+                    "stringValue": "/var/log/pods/hostlier-collector-test-workload_worker_11111111-2222-3333-4444-555555555555/main/0.log"
+                  }
+                },
+                {
+                  "key": "log.iostream",
+                  "value": {
+                    "stringValue": "stdout"
+                  }
+                },
+                {
+                  "key": "logtag",
+                  "value": {
+                    "stringValue": "F"
+                  }
+                },
+                {
+                  "key": "log.file.name",
+                  "value": {
+                    "stringValue": "0.log"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "resource": {
+        "attributes": [
+          {
+            "key": "k8s.pod.uid",
+            "value": {
+              "stringValue": "11111111-2222-3333-4444-555555555555"
+            }
+          },
+          {
+            "key": "k8s.container.name",
+            "value": {
+              "stringValue": "helper"
+            }
+          },
+          {
+            "key": "k8s.container.restart_count",
+            "value": {
+              "stringValue": "0"
+            }
+          },
+          {
+            "key": "k8s.namespace.name",
+            "value": {
+              "stringValue": "hostlier-collector-test-workload"
+            }
+          },
+          {
+            "key": "k8s.pod.name",
+            "value": {
+              "stringValue": "worker"
+            }
+          },
+          {
+            "key": "k8s.node.name",
+            "value": {
+              "stringValue": "fixture-node"
+            }
+          },
+          {
+            "key": "hostlier.application",
+            "value": {
+              "stringValue": "collector-fixture"
+            }
+          },
+          {
+            "key": "hostlier.runtime_revision",
+            "value": {
+              "stringValue": "fixture-revision"
+            }
+          }
+        ]
+      },
+      "scopeLogs": [
+        {
+          "scope": {
+            "name": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/filelogreceiver",
+            "version": "0.164.0"
+          },
+          "logRecords": [
+            {
+              "timeUnixNano": "1793291263012462032",
+              "observedTimeUnixNano": "1793291263120583874",
+              "body": {
+                "stringValue": "hostlier-k3s-sidecar-fixture"
+              },
+              "attributes": [
+                {
+                  "key": "log.iostream",
+                  "value": {
+                    "stringValue": "stdout"
+                  }
+                },
+                {
+                  "key": "logtag",
+                  "value": {
+                    "stringValue": "F"
+                  }
+                },
+                {
+                  "key": "log.file.name",
+                  "value": {
+                    "stringValue": "0.log"
+                  }
+                },
+                {
+                  "key": "log.file.path",
+                  "value": {
+                    "stringValue": "/var/log/pods/hostlier-collector-test-workload_worker_11111111-2222-3333-4444-555555555555/helper/0.log"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "resource": {
+        "attributes": [
+          {
+            "key": "k8s.container.restart_count",
+            "value": {
+              "stringValue": "0"
+            }
+          },
+          {
+            "key": "k8s.namespace.name",
+            "value": {
+              "stringValue": "hostlier-collector-test-workload"
+            }
+          },
+          {
+            "key": "k8s.pod.name",
+            "value": {
+              "stringValue": "worker"
+            }
+          },
+          {
+            "key": "k8s.pod.uid",
+            "value": {
+              "stringValue": "11111111-2222-3333-4444-555555555555"
+            }
+          },
+          {
+            "key": "k8s.container.name",
+            "value": {
+              "stringValue": "main"
+            }
+          },
+          {
+            "key": "k8s.node.name",
+            "value": {
+              "stringValue": "fixture-node"
+            }
+          },
+          {
+            "key": "hostlier.application",
+            "value": {
+              "stringValue": "collector-fixture"
+            }
+          },
+          {
+            "key": "hostlier.runtime_revision",
+            "value": {
+              "stringValue": "fixture-revision"
+            }
+          }
+        ]
+      },
+      "scopeLogs": [
+        {
+          "scope": {
+            "name": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/filelogreceiver",
+            "version": "0.164.0"
+          },
+          "logRecords": [
+            {
+              "timeUnixNano": "1793291262981856345",
+              "observedTimeUnixNano": "1793291263120639836",
+              "body": {
+                "stringValue": "hostlier-k3s-log-fixture"
+              },
+              "attributes": [
+                {
+                  "key": "log.file.path",
+                  "value": {
+                    "stringValue": "/var/log/pods/hostlier-collector-test-workload_worker_11111111-2222-3333-4444-555555555555/main/0.log"
+                  }
+                },
+                {
+                  "key": "logtag",
+                  "value": {
+                    "stringValue": "F"
+                  }
+                },
+                {
+                  "key": "log.iostream",
+                  "value": {
+                    "stringValue": "stdout"
+                  }
+                },
+                {
+                  "key": "log.file.name",
+                  "value": {
+                    "stringValue": "0.log"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "resource": {
+        "attributes": [
+          {
+            "key": "k8s.pod.uid",
+            "value": {
+              "stringValue": "11111111-2222-3333-4444-555555555555"
+            }
+          },
+          {
+            "key": "k8s.container.name",
+            "value": {
+              "stringValue": "main"
+            }
+          },
+          {
+            "key": "k8s.container.restart_count",
+            "value": {
+              "stringValue": "0"
+            }
+          },
+          {
+            "key": "k8s.namespace.name",
+            "value": {
+              "stringValue": "hostlier-collector-test-workload"
+            }
+          },
+          {
+            "key": "k8s.pod.name",
+            "value": {
+              "stringValue": "worker"
+            }
+          },
+          {
+            "key": "k8s.node.name",
+            "value": {
+              "stringValue": "fixture-node"
+            }
+          },
+          {
+            "key": "hostlier.application",
+            "value": {
+              "stringValue": "collector-fixture"
+            }
+          },
+          {
+            "key": "hostlier.runtime_revision",
+            "value": {
+              "stringValue": "fixture-revision"
+            }
+          }
+        ]
+      },
+      "scopeLogs": [
+        {
+          "scope": {
+            "name": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/filelogreceiver",
+            "version": "0.164.0"
+          },
+          "logRecords": [
+            {
+              "timeUnixNano": "1793291263982939680",
+              "observedTimeUnixNano": "1793291264120511311",
+              "body": {
+                "stringValue": "hostlier-k3s-log-fixture"
+              },
+              "attributes": [
+                {
+                  "key": "log.file.name",
+                  "value": {
+                    "stringValue": "0.log"
+                  }
+                },
+                {
+                  "key": "logtag",
+                  "value": {
+                    "stringValue": "F"
+                  }
+                },
+                {
+                  "key": "log.iostream",
+                  "value": {
+                    "stringValue": "stdout"
+                  }
+                },
+                {
+                  "key": "log.file.path",
+                  "value": {
+                    "stringValue": "/var/log/pods/hostlier-collector-test-workload_worker_11111111-2222-3333-4444-555555555555/main/0.log"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "resource": {
+        "attributes": [
+          {
+            "key": "k8s.container.restart_count",
+            "value": {
+              "stringValue": "0"
+            }
+          },
+          {
+            "key": "k8s.namespace.name",
+            "value": {
+              "stringValue": "hostlier-collector-test-workload"
+            }
+          },
+          {
+            "key": "k8s.pod.name",
+            "value": {
+              "stringValue": "worker"
+            }
+          },
+          {
+            "key": "k8s.pod.uid",
+            "value": {
+              "stringValue": "11111111-2222-3333-4444-555555555555"
+            }
+          },
+          {
+            "key": "k8s.container.name",
+            "value": {
+              "stringValue": "helper"
+            }
+          },
+          {
+            "key": "hostlier.application",
+            "value": {
+              "stringValue": "collector-fixture"
+            }
+          },
+          {
+            "key": "hostlier.runtime_revision",
+            "value": {
+              "stringValue": "fixture-revision"
+            }
+          },
+          {
+            "key": "k8s.node.name",
+            "value": {
+              "stringValue": "fixture-node"
+            }
+          }
+        ]
+      },
+      "scopeLogs": [
+        {
+          "scope": {
+            "name": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/filelogreceiver",
+            "version": "0.164.0"
+          },
+          "logRecords": [
+            {
+              "timeUnixNano": "1793291264013588528",
+              "observedTimeUnixNano": "1793291264120538264",
+              "body": {
+                "stringValue": "hostlier-k3s-sidecar-fixture"
+              },
+              "attributes": [
+                {
+                  "key": "logtag",
+                  "value": {
+                    "stringValue": "F"
+                  }
+                },
+                {
+                  "key": "log.file.path",
+                  "value": {
+                    "stringValue": "/var/log/pods/hostlier-collector-test-workload_worker_11111111-2222-3333-4444-555555555555/helper/0.log"
+                  }
+                },
+                {
+                  "key": "log.file.name",
+                  "value": {
+                    "stringValue": "0.log"
+                  }
+                },
+                {
+                  "key": "log.iostream",
+                  "value": {
+                    "stringValue": "stdout"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "resource": {
+        "attributes": [
+          {
+            "key": "k8s.pod.name",
+            "value": {
+              "stringValue": "worker"
+            }
+          },
+          {
+            "key": "k8s.pod.uid",
+            "value": {
+              "stringValue": "11111111-2222-3333-4444-555555555555"
+            }
+          },
+          {
+            "key": "k8s.container.name",
+            "value": {
+              "stringValue": "helper"
+            }
+          },
+          {
+            "key": "k8s.container.restart_count",
+            "value": {
+              "stringValue": "0"
+            }
+          },
+          {
+            "key": "k8s.namespace.name",
+            "value": {
+              "stringValue": "hostlier-collector-test-workload"
+            }
+          },
+          {
+            "key": "k8s.node.name",
+            "value": {
+              "stringValue": "fixture-node"
+            }
+          },
+          {
+            "key": "hostlier.application",
+            "value": {
+              "stringValue": "collector-fixture"
+            }
+          },
+          {
+            "key": "hostlier.runtime_revision",
+            "value": {
+              "stringValue": "fixture-revision"
+            }
+          }
+        ]
+      },
+      "scopeLogs": [
+        {
+          "scope": {
+            "name": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/filelogreceiver",
+            "version": "0.164.0"
+          },
+          "logRecords": [
+            {
+              "timeUnixNano": "1793291265014348686",
+              "observedTimeUnixNano": "1793291265120490180",
+              "body": {
+                "stringValue": "hostlier-k3s-sidecar-fixture"
+              },
+              "attributes": [
+                {
+                  "key": "log.file.path",
+                  "value": {
+                    "stringValue": "/var/log/pods/hostlier-collector-test-workload_worker_11111111-2222-3333-4444-555555555555/helper/0.log"
+                  }
+                },
+                {
+                  "key": "log.file.name",
+                  "value": {
+                    "stringValue": "0.log"
+                  }
+                },
+                {
+                  "key": "log.iostream",
+                  "value": {
+                    "stringValue": "stdout"
+                  }
+                },
+                {
+                  "key": "logtag",
+                  "value": {
+                    "stringValue": "F"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "resource": {
+        "attributes": [
+          {
+            "key": "k8s.container.name",
+            "value": {
+              "stringValue": "main"
+            }
+          },
+          {
+            "key": "k8s.container.restart_count",
+            "value": {
+              "stringValue": "0"
+            }
+          },
+          {
+            "key": "k8s.namespace.name",
+            "value": {
+              "stringValue": "hostlier-collector-test-workload"
+            }
+          },
+          {
+            "key": "k8s.pod.name",
+            "value": {
+              "stringValue": "worker"
+            }
+          },
+          {
+            "key": "k8s.pod.uid",
+            "value": {
+              "stringValue": "11111111-2222-3333-4444-555555555555"
+            }
+          },
+          {
+            "key": "k8s.node.name",
+            "value": {
+              "stringValue": "fixture-node"
+            }
+          },
+          {
+            "key": "hostlier.application",
+            "value": {
+              "stringValue": "collector-fixture"
+            }
+          },
+          {
+            "key": "hostlier.runtime_revision",
+            "value": {
+              "stringValue": "fixture-revision"
+            }
+          }
+        ]
+      },
+      "scopeLogs": [
+        {
+          "scope": {
+            "name": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/filelogreceiver",
+            "version": "0.164.0"
+          },
+          "logRecords": [
+            {
+              "timeUnixNano": "1793291264985533027",
+              "observedTimeUnixNano": "1793291265120501407",
+              "body": {
+                "stringValue": "hostlier-k3s-log-fixture"
+              },
+              "attributes": [
+                {
+                  "key": "log.file.path",
+                  "value": {
+                    "stringValue": "/var/log/pods/hostlier-collector-test-workload_worker_11111111-2222-3333-4444-555555555555/main/0.log"
+                  }
+                },
+                {
+                  "key": "log.file.name",
+                  "value": {
+                    "stringValue": "0.log"
+                  }
+                },
+                {
+                  "key": "log.iostream",
+                  "value": {
+                    "stringValue": "stdout"
+                  }
+                },
+                {
+                  "key": "logtag",
+                  "value": {
+                    "stringValue": "F"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "resource": {
+        "attributes": [
+          {
+            "key": "k8s.pod.uid",
+            "value": {
+              "stringValue": "11111111-2222-3333-4444-555555555555"
+            }
+          },
+          {
+            "key": "k8s.container.name",
+            "value": {
+              "stringValue": "helper"
+            }
+          },
+          {
+            "key": "k8s.container.restart_count",
+            "value": {
+              "stringValue": "0"
+            }
+          },
+          {
+            "key": "k8s.namespace.name",
+            "value": {
+              "stringValue": "hostlier-collector-test-workload"
+            }
+          },
+          {
+            "key": "k8s.pod.name",
+            "value": {
+              "stringValue": "worker"
+            }
+          },
+          {
+            "key": "k8s.node.name",
+            "value": {
+              "stringValue": "fixture-node"
+            }
+          },
+          {
+            "key": "hostlier.application",
+            "value": {
+              "stringValue": "collector-fixture"
+            }
+          },
+          {
+            "key": "hostlier.runtime_revision",
+            "value": {
+              "stringValue": "fixture-revision"
+            }
+          }
+        ]
+      },
+      "scopeLogs": [
+        {
+          "scope": {
+            "name": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/filelogreceiver",
+            "version": "0.164.0"
+          },
+          "logRecords": [
+            {
+              "timeUnixNano": "1793291266015326805",
+              "observedTimeUnixNano": "1793291266120320009",
+              "body": {
+                "stringValue": "hostlier-k3s-sidecar-fixture"
+              },
+              "attributes": [
+                {
+                  "key": "log.file.path",
+                  "value": {
+                    "stringValue": "/var/log/pods/hostlier-collector-test-workload_worker_11111111-2222-3333-4444-555555555555/helper/0.log"
+                  }
+                },
+                {
+                  "key": "log.file.name",
+                  "value": {
+                    "stringValue": "0.log"
+                  }
+                },
+                {
+                  "key": "logtag",
+                  "value": {
+                    "stringValue": "F"
+                  }
+                },
+                {
+                  "key": "log.iostream",
+                  "value": {
+                    "stringValue": "stdout"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "resource": {
+        "attributes": [
+          {
+            "key": "k8s.pod.name",
+            "value": {
+              "stringValue": "worker"
+            }
+          },
+          {
+            "key": "k8s.pod.uid",
+            "value": {
+              "stringValue": "11111111-2222-3333-4444-555555555555"
+            }
+          },
+          {
+            "key": "k8s.container.name",
+            "value": {
+              "stringValue": "main"
+            }
+          },
+          {
+            "key": "k8s.container.restart_count",
+            "value": {
+              "stringValue": "0"
+            }
+          },
+          {
+            "key": "k8s.namespace.name",
+            "value": {
+              "stringValue": "hostlier-collector-test-workload"
+            }
+          },
+          {
+            "key": "k8s.node.name",
+            "value": {
+              "stringValue": "fixture-node"
+            }
+          },
+          {
+            "key": "hostlier.application",
+            "value": {
+              "stringValue": "collector-fixture"
+            }
+          },
+          {
+            "key": "hostlier.runtime_revision",
+            "value": {
+              "stringValue": "fixture-revision"
+            }
+          }
+        ]
+      },
+      "scopeLogs": [
+        {
+          "scope": {
+            "name": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/filelogreceiver",
+            "version": "0.164.0"
+          },
+          "logRecords": [
+            {
+              "timeUnixNano": "1793291265987335964",
+              "observedTimeUnixNano": "1793291266120338513",
+              "body": {
+                "stringValue": "hostlier-k3s-log-fixture"
+              },
+              "attributes": [
+                {
+                  "key": "log.file.path",
+                  "value": {
+                    "stringValue": "/var/log/pods/hostlier-collector-test-workload_worker_11111111-2222-3333-4444-555555555555/main/0.log"
+                  }
+                },
+                {
+                  "key": "log.file.name",
+                  "value": {
+                    "stringValue": "0.log"
+                  }
+                },
+                {
+                  "key": "log.iostream",
+                  "value": {
+                    "stringValue": "stdout"
+                  }
+                },
+                {
+                  "key": "logtag",
+                  "value": {
+                    "stringValue": "F"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+version: 2
+name: ollama-chat
+source:
+  container:
+    context: ./dist/example
+    architecture: amd64
+workload: service
+endpoint:
+  exposure: public
+  port: 8080
+  route: https://chat.example.com
+health:
+  path: /healthz
+  timeoutSeconds: 45
+env:
+  PORT: '8080'
+  NODE_ENV: production
+  MINION_ORIGIN: https://chat.example.com
+  AGENT_URL: https://agent.example.com
+secrets:
+  # Reuse the agent credential already stored on this controller.
+  AGENT_ACCESS_TOKEN: secret://ollama-agent-access
+resources:
+  cpu: '0.25'
+  memory: 192Mi
+shutdown:
+  graceSeconds: 15

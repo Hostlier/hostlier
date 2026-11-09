@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Hostlier · Access</title>
+  <link rel="stylesheet" href="/access.css">
+  <script type="module" src="/access.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to request</a>
+  <header class="site-header"><div class="header-inner">
+    <a class="brand" href="/" aria-label="Hostlier access home"><span class="brand-mark" aria-hidden="true">h</span>hostlier</a>
+    <span class="header-divider" aria-hidden="true">/</span><span class="header-label">Access & approvals</span>
+
+  </div></header>
+  <main id="content" tabindex="-1">
+    <div class="page-heading"><h1 id="title">Connect your workspace.</h1><p id="intro">Start in your terminal, then approve access here.</p></div>
+    <ol hidden class="steps" aria-label="Approval progress"><li id="step-review" aria-current="step"><span>1</span>Review request</li><li id="step-verify"><span>2</span>Verify with passkey</li><li id="step-done"><span>3</span>Continue working</li></ol>
+    <div class="layout">
+      <div class="review-column">
+        <section id="command-panel" class="panel"><div class="section-heading"><span class="section-number">01</span><div><h2 id="command-title">Start a connection</h2><p id="command-hint">Run this command in your terminal to get a secure approval link.</p></div></div><pre id="command"></pre><p class="helper">CLI · Minion · Dashboard monitoring</p></section>
+        <section id="details" class="panel" hidden><div class="request-header"><div><h2 id="details-title">Device</h2><p id="device-name"></p></div><span id="request-state" class="badge">Pending</span></div><div id="operation-review" hidden></div><details class="technical"><summary>Request details & fingerprint</summary><p id="details-hint" class="helper">Compare this fingerprint with the device that started the request.</p><dl id="request-facts" class="facts"></dl><details class="technical"><summary>Raw request</summary><pre id="review"></pre></details></details></section>
+        <form id="scope" class="panel" hidden>
+          <div class="section-heading"><h2>Access</h2></div>
+          <fieldset class="scope-options"><legend class="sr-only">Connection permissions</legend>
+            <label class="scope-option"><input type="radio" name="access-mode" id="mode-all" value="all" checked><span><strong>All access</strong><small>Manage this controller and all its applications.</small></span></label>
+            <label class="scope-option"><input type="radio" name="access-mode" id="mode-restricted" value="restricted"><span><strong>Restricted deployments</strong><small>Choose exact apps, secrets, and deployment limits.</small></span></label>
+          </fieldset>
+          <div id="scope-fields" hidden>
+            <label class="field">Application names <span>Required</span><input id="apps" placeholder="minion-stocks, customer-portal" autocomplete="off" aria-describedby="apps-help"></label><p id="apps-help" class="helper">Comma-separated names. Only stateless deployments to these exact apps.</p>
+            <div class="row"><label class="field">Lifetime <span>Minutes</span><input id="minutes" type="number" min="1" max="480" step="1" placeholder="60"></label><label class="field">Deployment limit <span>1–100</span><input id="uses" type="number" min="1" max="100" step="1" placeholder="10"></label></div>
+            <details class="secret-options"><summary>Secret permissions <span>Optional</span></summary><label class="field">Allowed secret names<input id="secrets" placeholder="minion-stocks-engine-token" autocomplete="off"></label><label class="field">Secrets this connection may create<input id="create-secrets" placeholder="new-app-access" autocomplete="off" aria-describedby="secrets-help"></label><p id="secrets-help" class="helper">Include these in Allowed secret names too. Creation only applies to missing secrets; it cannot read, replace, or delete existing values.</p></details>
+          </div>
+          <div id="scope-notice" class="notice"><strong id="scope-label">Full controller access</strong><p id="scope-summary" role="status">All applications, secrets, and controller settings. No expiry or usage limit. This includes write access, even when connecting for monitoring.</p></div>
+        </form>
+      </div>
+      <aside class="decision-column" aria-label="Approval summary">
+        <section class="panel decision-panel"><div hidden class="lock-icon" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 5 8 9 8 9s8-4 8-9V6l-8-3Z"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg></div><h2 hidden id="decision-title">Secure by your passkey.</h2><p hidden id="decision-description">Review the request, then verify with your device or a physical security key.</p><dl class="decision-facts"><div><dt>Controller</dt><dd id="controller"></dd></div><div hidden><dt>Permission</dt><dd id="permission">Not yet requested</dd></div><div id="expiry-row" hidden><dt>Request expires</dt><dd id="expiry"></dd></div></dl><div id="actions"></div><p id="status" role="status" aria-live="polite" aria-atomic="true" tabindex="-1" hidden></p><p class="decision-note" id="decision-note">Your passkey stays on your device or in your passkey manager.</p><details id="fallback" class="technical" hidden><summary>Code for older CLIs</summary><pre id="code"></pre><p class="helper">Use this only in the terminal that started the connection.</p></details></section>
+
+      </aside>
+    </div>
+    <noscript><p class="notice">JavaScript is required to review requests and verify your passkey.</p></noscript>
+    <footer><span>CLI · Minion · Dashboard</span></footer>
+  </main>
+</body>
+</html>

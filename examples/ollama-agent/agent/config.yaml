@@ -1,0 +1,23 @@
+apiVersion: harnest.dev/v1alpha1
+kind: Agent
+metadata:
+  name: ollama-assistant
+spec:
+  entrypoint: agent:root_agent
+  framework:
+    name: adk
+    mode: managed
+  interfaces:
+    cli: true
+  runtime:
+    dependencyFile: pyproject.toml
+    version: '3.12'
+server:
+  live: false
+  http:
+    requestTimeoutSeconds: 120
+    maxConcurrentRequests: 2
+  limits:
+    maxRequestBytes: 16KiB
+  playground:
+    enabled: false

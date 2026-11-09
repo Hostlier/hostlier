@@ -1,0 +1,15 @@
+version: 1
+app: analytics
+name: primary
+engine: postgres
+mode: new-instance
+database: analytics
+outputSecret: analytics-database-url
+instance:
+  tokenSecret: railway-api-token
+  tokenType: project
+  project: your-project-id
+  environment: your-environment-id
+  service: analytics-postgres
+  template: your-reviewed-postgres-template-id
+  publicAccess: true

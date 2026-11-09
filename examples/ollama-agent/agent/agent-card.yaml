@@ -1,0 +1,16 @@
+name: ollama_assistant
+description: A Harnest test assistant using Ollama Cloud, a calculator, and a UTC clock.
+version: 1.0.0
+supportedInterfaces:
+  - url: https://agent.example.com/a2a
+    protocolBinding: JSONRPC
+    protocolVersion: '1.0'
+capabilities:
+  streaming: true
+defaultInputModes: [text/plain]
+defaultOutputModes: [text/plain]
+skills:
+  - id: assistant
+    name: Ollama Cloud assistant
+    description: Answers questions and verifies calculations and current UTC time with tools.
+    tags: [assistant, ollama, test]

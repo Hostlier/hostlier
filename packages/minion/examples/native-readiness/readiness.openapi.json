@@ -1,0 +1,27 @@
+{
+  "openapi": "3.0.3",
+  "info": { "title": "Fused Local Readiness Fixture", "version": "1.0.0" },
+  "servers": [{ "url": "http://127.0.0.1:28082" }],
+  "paths": {
+    "/status": {
+      "get": {
+        "operationId": "ReadStatus",
+        "summary": "Read an explicitly synthetic local test response",
+        "responses": {
+          "200": {
+            "description": "Local test response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["status", "synthetic"],
+                  "properties": { "status": {"type": "string"}, "synthetic": {"type": "boolean"} }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

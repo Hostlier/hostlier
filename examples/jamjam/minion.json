@@ -1,0 +1,5 @@
+{
+  "name": "jamjam",
+  "entry": "app.ts",
+  "ui": { "entry": "ui.tsx", "load": "load.ts", "title": "Hello Minion" }
+}

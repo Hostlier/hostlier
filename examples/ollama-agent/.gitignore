@@ -1,0 +1,4 @@
+dist/
+agent/.harnest/
+agent/.venv
+__pycache__/

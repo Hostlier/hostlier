@@ -1,0 +1,364 @@
+@import "tailwindcss" source(none);
+@source "./*.html";
+@source "./*.js";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+}
+
+@layer base {
+  :root { color-scheme: light; }
+  html { scroll-padding-top: 24px; }
+  body { @apply m-0 bg-white font-sans text-sm text-neutral-950 antialiased; }
+  button, a { -webkit-tap-highlight-color: transparent; }
+  button { @apply cursor-pointer; }
+  button:disabled { @apply cursor-not-allowed; }
+  button:focus-visible, a:focus-visible { @apply outline-2 outline-offset-4 outline-black; }
+  [hidden] { display: none !important; }
+  h1, h2, p { @apply m-0; }
+  a { @apply text-inherit no-underline; }
+  svg { @apply shrink-0; }
+}
+
+@layer components {
+  .skip-link { @apply fixed -top-20 left-4 z-50 rounded-md bg-black px-4 py-3 text-white focus:top-4; }
+  .site-header { @apply border-b border-neutral-200 bg-white; }
+  .header-inner { @apply mx-auto flex h-20 max-w-[1280px] items-center gap-6 px-8 lg:px-12; }
+  .brand { @apply flex shrink-0 items-center gap-2.5 text-[21px] font-semibold tracking-[-0.8px]; }
+  .brand svg { @apply size-7; }
+  .header-divider { @apply h-5 w-px rotate-[20deg] bg-neutral-200; }
+  .server-select { @apply flex min-w-0 items-center gap-2.5 text-xs font-medium; }
+  .server-symbol { @apply text-xl font-normal text-neutral-500; }
+  #server { @apply truncate; }
+  .runtime-label { @apply ml-1 rounded-md border border-neutral-200 px-2 py-0.5 text-[10px] font-normal text-neutral-500; }
+  .connection { @apply ml-auto flex shrink-0 items-center gap-2 text-[11px] text-neutral-500; }
+  .status-dot { @apply inline-block size-1.5 shrink-0 rounded-full border border-neutral-400; }
+  .status-dot.live { @apply border-black bg-black; }
+  .navigation { @apply mx-auto flex max-w-[1280px] gap-7 px-8 lg:px-12; }
+  .nav-link { @apply relative pb-4 text-xs font-medium text-neutral-500 transition-colors hover:text-black; }
+  .nav-link.selected { @apply text-black; }
+  .nav-link.selected::after { @apply absolute right-0 -bottom-px left-0 h-0.5 bg-black; content: ""; }
+  main { @apply mx-auto max-w-[1280px] px-8 pt-12 outline-none lg:px-12; }
+  .page-heading { @apply mb-9 flex items-end justify-between gap-6; }
+  .eyebrow { @apply text-[10px] font-medium tracking-[0.12em] text-neutral-500; }
+  h1 { @apply mt-2 mb-2 text-[32px] leading-tight font-semibold tracking-[-1.25px]; }
+  .page-heading p { @apply text-[13px] text-neutral-500; }
+  .capture { @apply flex flex-col items-end gap-1.5 text-[11px]; }
+  .capture-label { @apply text-neutral-500; }
+  .capture time { @apply font-mono text-xs tabular-nums; }
+  .capture-caption { @apply text-[10px] text-neutral-500; }
+  .notice { @apply mb-7 rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3 text-xs leading-relaxed text-neutral-600; }
+  .metrics-grid { @apply mb-12 grid grid-cols-4 gap-4; }
+  .metric { @apply rounded-lg border border-neutral-200 bg-white px-5 py-5; }
+  .metric-label { @apply flex items-center justify-between gap-3 text-xs text-neutral-500; }
+  .metric-label svg { @apply size-3.5 text-neutral-400; }
+  .metric-value { @apply mt-4 block text-[29px] leading-none font-medium tracking-[-1.1px] tabular-nums; }
+  .metric-caption { @apply mt-2.5 block text-[10px] text-neutral-500; }
+  .section { @apply mb-11 scroll-mt-6; }
+  .section-heading { @apply mb-5 flex items-center justify-between gap-4; }
+  h2 { @apply flex items-center gap-2.5 text-sm font-semibold tracking-[-0.2px]; }
+  .section-heading p { @apply mt-1.5 text-xs text-neutral-500; }
+  .count { @apply inline-flex h-5 min-w-5 items-center justify-center rounded-md bg-neutral-100 px-1.5 text-[10px] font-medium text-neutral-600 tabular-nums; }
+  .section-note { @apply text-[9px] font-medium tracking-[0.1em] text-neutral-400; }
+  .table-container { @apply overflow-x-auto rounded-lg border border-neutral-200; }
+  table { @apply w-full border-collapse text-left; }
+  thead { @apply bg-neutral-50/80; }
+  th { @apply px-5 py-3 text-[10px] font-medium text-neutral-500; }
+  td { @apply border-t border-neutral-100 px-5 py-5 text-xs; }
+  tbody tr { @apply transition-colors hover:bg-neutral-50/70; }
+  .application-cell { @apply flex items-center gap-3; }
+  .application-icon { @apply flex size-9 shrink-0 items-center justify-center rounded-lg border border-neutral-200 bg-white; }
+  .application-icon svg { @apply size-4 text-neutral-600; }
+  .app-name { @apply block text-xs font-medium; }
+  .app-url { @apply mt-1 block max-w-[280px] truncate text-[10px] text-neutral-500; }
+  .badge { @apply inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border border-neutral-200 bg-white px-2 py-1 text-[10px] font-medium text-neutral-600; }
+  .badge-dot { @apply size-1 rounded-full border border-neutral-400; }
+  .badge[data-tone="active"] { @apply border-neutral-200 bg-neutral-100 text-neutral-900; }
+  .badge[data-tone="active"] .badge-dot { @apply border-neutral-800 bg-neutral-800; }
+  .badge[data-tone="attention"] { @apply border-neutral-700 text-black; }
+  .badge[data-tone="attention"] .badge-dot { @apply size-auto rounded-none border-0 text-[10px] leading-none; }
+  .observation-note { @apply mt-1.5 block max-w-44 text-[10px] text-neutral-500; }
+  .replicas { @apply font-mono text-[11px] tabular-nums; }
+  .resource-value { @apply block font-mono text-[11px] font-normal tabular-nums; }
+  .resource-caption { @apply mt-1 block text-[10px] text-neutral-500; }
+  .actions-heading { @apply text-right; }
+  .actions { @apply flex justify-end gap-1.5; }
+  .button { @apply inline-flex min-h-8 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-neutral-200 bg-white px-2.5 py-1.5 text-[10px] font-medium text-neutral-700 shadow-xs transition-colors hover:border-neutral-300 hover:bg-neutral-100 disabled:opacity-40 disabled:shadow-none; }
+  .button-primary { @apply border-black bg-black px-3.5 text-white hover:border-neutral-800 hover:bg-neutral-800; }
+  .button svg { @apply size-3; }
+  .operation-list { @apply overflow-hidden rounded-lg border border-neutral-200; }
+  .operation { @apply flex items-center justify-between gap-4 border-b border-neutral-100 px-5 py-4 last:border-0; }
+  .operation-detail { @apply flex min-w-0 items-center gap-3; }
+  .operation-detail > div { @apply min-w-0; }
+  .operation-icon { @apply flex size-8 shrink-0 items-center justify-center rounded-full bg-neutral-100; }
+  .operation-icon svg { @apply size-3.5 text-neutral-600; }
+  .operation-title { @apply text-xs font-medium; }
+  .operation-title { overflow-wrap: anywhere; }
+  .operation-id { @apply mt-1 block truncate font-mono text-[10px] text-neutral-500; }
+  .operation-kind { @apply ml-1.5 font-normal text-neutral-500; }
+  .empty-state { @apply flex flex-col items-center justify-center gap-2 px-5 py-10 text-center; }
+  .empty-state svg { @apply mb-1 size-5 text-neutral-400; }
+  .empty-state strong { @apply text-xs font-medium text-neutral-700; }
+  .empty-state p { @apply max-w-sm text-[11px] leading-relaxed text-neutral-500; }
+  .action-panel { @apply mb-11 rounded-lg border border-neutral-300 bg-neutral-50 p-5; }
+  .action-panel .section-heading { @apply mb-3; }
+  .action-content p { @apply text-xs leading-relaxed text-neutral-600; }
+  .action-controls { @apply mt-4 flex flex-wrap gap-2; }
+  .action-content pre { @apply mt-4 overflow-auto rounded-md border border-neutral-200 bg-white p-4 font-mono text-[11px]; }
+  footer { @apply mt-14 flex items-center justify-between gap-5 border-t border-neutral-200 pt-6 pb-8 text-[10px] text-neutral-500; }
+  .footer-brand { @apply whitespace-nowrap font-medium text-neutral-600; }
+  .footer-divider { @apply mx-2 font-normal text-neutral-300; }
+  .footer-dot { @apply mx-2 text-neutral-300; }
+}
+
+@media (max-width: 900px) {
+  .runtime-label { display: none; }
+  .connection { max-width: 155px; }
+  .metrics-grid { gap: 10px; }
+  .metric { padding: 16px; }
+  td, th { padding-left: 16px; padding-right: 16px; }
+}
+@media (max-width: 640px) {
+  .header-inner { height: 68px; padding: 0 20px; gap: 16px; flex-wrap: wrap; }
+  .brand { font-size: 19px; }
+  .brand svg { width: 25px; height: 25px; }
+  .server-select { flex: 1; }
+  .server-symbol, .connection { display: none; }
+  .navigation { padding: 0 20px; gap: 25px; }
+  main { padding: 32px 20px 0; }
+  .page-heading { align-items: start; margin-bottom: 26px; }
+  h1 { font-size: 28px; }
+  .page-heading p { max-width: 210px; font-size: 12px; line-height: 1.6; }
+  .capture { padding-top: 21px; gap: 5px; }
+  .capture-caption { display: none; }
+  .metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: 36px; }
+  .metric-value { font-size: 26px; }
+  .metric-caption { font-size: 10px; }
+  .section-note { display: none; }
+  .table-container table { min-width: 700px; }
+  .section { margin-bottom: 34px; }
+  footer { margin-top: 40px; flex-direction: column; align-items: start; gap: 10px; line-height: 1.7; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; scroll-behavior: auto !important; }
+}
+
+@layer components {
+  #manage-connection { @apply ml-auto shrink-0; }
+  .connection { @apply ml-0; }
+  .link-panel { @apply mb-8 rounded-lg border border-neutral-200 bg-neutral-50 p-5; }
+  .link-form { @apply grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] items-end gap-3; }
+  .field-label { @apply flex flex-col gap-2 text-[11px] font-medium text-neutral-600; }
+  .field-label input, .saved-controls select { @apply min-h-10 w-full rounded-md border border-neutral-200 bg-white px-3 text-xs text-black outline-offset-2 placeholder:text-neutral-400 focus:outline-2 focus:outline-black; }
+  .link-form .button { @apply min-h-10; }
+  .link-feedback { @apply mt-3 text-xs leading-relaxed text-neutral-500; }
+  .saved-controls { @apply mt-2 flex gap-2; }
+  .saved-controls select { @apply max-w-md; }
+  .form-divider { @apply my-4 text-[10px] text-neutral-500; }
+  .pairing-request { @apply mt-4 border-t border-neutral-200 pt-4; }
+  .pairing-request p { @apply my-2 text-xs text-neutral-600; }
+  .pairing-request code { @apply block overflow-auto rounded-md border border-neutral-200 bg-white p-3 font-mono text-[11px]; }
+}
+@media (max-width:640px) {
+  .link-form { grid-template-columns: 1fr; }
+  .header-inner { gap: 10px; }
+  #manage-connection { padding: 6px 8px; font-size: 10px; }
+  .server-select { max-width: 140px; }
+}
+
+@layer components { .local-cli-label { @apply ml-1 rounded border border-neutral-200 px-1.5 py-1 text-[8px] font-medium tracking-[0.08em] text-neutral-500; } }
+@media(max-width:640px) { .local-cli-label { display:none; } }
+
+@layer components {
+  .navigation { @apply overflow-x-auto; }
+  .nav-link { @apply whitespace-nowrap; }
+  .breadcrumbs { @apply mb-5 text-xs; }
+  .text-link { @apply underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-4; overflow-wrap:anywhere; }
+  .shortcut-grid { @apply mb-8 grid grid-cols-3 gap-4; }
+  .shortcut-card { @apply rounded-lg border border-neutral-200 p-6 transition-colors hover:border-black focus-visible:outline-2 focus-visible:outline-offset-4; }
+  .shortcut-card h2 { @apply mt-6 mb-2 text-base font-medium; }
+  .shortcut-card p { @apply text-xs leading-relaxed text-neutral-500; }
+  .detail-panel { @apply mb-6 overflow-hidden rounded-lg border border-neutral-200; }
+  .panel-heading { @apply border-b border-neutral-200 px-5 py-4; }
+  .panel-heading h2 { @apply text-sm font-medium; }
+  .panel-heading p { @apply mt-1 text-xs leading-relaxed text-neutral-500; }
+  .panel-body { @apply p-5; }
+  .facts { @apply grid gap-0 text-xs; }
+  .facts > div { @apply grid grid-cols-[minmax(100px,1fr)_minmax(0,2fr)] gap-4 border-b border-neutral-100 py-3 first:pt-0 last:border-0 last:pb-0; }
+  .facts dt { @apply text-neutral-500; }
+  .facts dd { @apply min-w-0 leading-relaxed; overflow-wrap:anywhere; }
+  .detail-grid { @apply grid grid-cols-2 gap-5; }
+  .detail-actions { @apply mb-6 flex flex-wrap items-center gap-2; }
+  .detail-actions .text-link { @apply ml-auto text-xs; }
+  .json-details { @apply mt-4 text-xs first:mt-0; }
+  .json-details summary { @apply cursor-pointer py-2 font-medium text-neutral-600; }
+  .code-block { @apply my-3 max-h-96 overflow-auto rounded-md bg-neutral-50 p-4 font-mono text-[11px] leading-relaxed; white-space:pre-wrap;overflow-wrap:anywhere; }
+  .log-tail { @apply min-h-32; }
+  .operation { @apply transition-colors hover:bg-neutral-50 focus-visible:outline-2 focus-visible:outline-offset-2; }
+  .filter-input { @apply min-h-10 rounded-md border border-neutral-200 bg-white px-3 text-xs text-black focus:outline-2 focus:outline-offset-2 focus:outline-black; }
+  .observation-filters { @apply mb-6 flex flex-wrap items-end gap-3; }
+  .observation-filters .field-label { @apply min-w-32 flex-1; }
+  .observation-filters .button { @apply min-h-10; }
+  .history-status { @apply mb-5 text-[11px] text-neutral-500; }
+  .series-grid { @apply grid grid-cols-3 gap-4; }
+  .series-card { @apply min-w-0 rounded-lg border border-neutral-200 p-4; }
+  .series-card h3 { @apply text-xs font-medium; overflow-wrap:anywhere; }
+  .series-identity { @apply my-2 truncate text-[10px] text-neutral-500; }
+  .series-value { @apply block text-xl font-medium; overflow-wrap:anywhere; }
+  .series-caption { @apply mt-2 text-[10px] leading-relaxed text-neutral-500; }
+  .sparkline { @apply mt-3 h-20 w-full; }
+  .chart-placeholder { @apply my-5 text-[11px] text-neutral-400; }
+  .log-record { @apply border-b border-neutral-200 py-4 first:pt-0 last:border-0; }
+  .log-meta { @apply mb-2 flex flex-wrap gap-3 text-[10px] text-neutral-500; }
+  .log-body { @apply font-mono text-[11px] leading-relaxed; white-space:pre-wrap;overflow-wrap:anywhere; }
+}
+@media(max-width:900px){.series-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.shortcut-grid{grid-template-columns:1fr}.detail-grid{grid-template-columns:1fr}}
+@media(max-width:640px){.navigation{gap:20px}.series-grid{grid-template-columns:1fr}.observation-filters .field-label{flex-basis:100%}.panel-body,.panel-heading{padding:16px}.detail-actions .text-link{margin-left:0;flex-basis:100%;margin-top:10px}}
+
+@layer components {
+  .header-inner { @apply max-w-none; }
+  .workspace-layout { @apply mx-auto grid min-h-[calc(100vh-80px)] max-w-[1600px] grid-cols-[205px_minmax(0,1fr)]; }
+  .sidebar { @apply border-r border-neutral-200 px-4 pt-8; }
+  .sidebar-caption { @apply mb-3 block px-3 text-[9px] font-medium tracking-widest text-neutral-400; }
+  .navigation { @apply m-0 flex max-w-none flex-col gap-1 overflow-visible p-0; }
+  .navigation .sidebar-caption { @apply mt-6 mb-2; }
+  .nav-link { @apply rounded-md px-3 py-2.5 text-xs text-neutral-500 hover:bg-neutral-50; }
+  .nav-link.selected { @apply bg-neutral-100 text-black; }
+  .nav-link.selected::after { display:none; }
+  .sidebar-note { @apply mt-9 px-3 text-[10px] leading-relaxed text-neutral-400; }
+  main { @apply mx-0 min-w-0 max-w-none px-8 pt-9 lg:px-10; }
+  .summary-grid { @apply mb-7 grid grid-cols-3 gap-4; }
+  .summary-card { @apply flex flex-col rounded-lg border border-neutral-200 p-5 transition-colors hover:border-black; }
+  .summary-card > span { @apply text-xs text-neutral-500; }
+  .summary-card strong { @apply mt-4 text-2xl font-medium; }
+  .summary-card small { @apply mt-3 text-[10px] text-neutral-500; }
+  .related-links { @apply flex flex-wrap gap-x-4 gap-y-2 text-xs; }
+  .related-links a { @apply text-neutral-800 underline-offset-4 hover:underline; }
+  .muted { @apply text-xs leading-relaxed text-neutral-500; }
+  .subheading { @apply mt-6 mb-3 text-xs font-medium; }
+  .inventory-table { @apply w-full; min-width:560px; }
+  .inventory-table td { @apply py-4 text-xs; overflow-wrap:anywhere; }
+  .inventory-table th { @apply text-[10px]; }
+  .inventory-table .related-links { @apply min-w-24; }
+  .command-card { @apply mt-4 rounded-lg border border-neutral-200 bg-neutral-50 p-4 first:mt-0; }
+  .command-heading { @apply flex items-center justify-between gap-3; }
+  .command-heading h3 { @apply m-0 text-xs font-medium; }
+  .command-card p { @apply mt-2 max-w-2xl text-[11px] leading-relaxed text-neutral-500; }
+  .cli-command { @apply mt-3 block overflow-x-auto rounded border border-neutral-200 bg-white p-3 font-mono text-[11px] leading-relaxed; white-space:pre-wrap;overflow-wrap:anywhere;user-select:all; }
+  .inventory-freshness { @apply mb-6 text-[10px] text-neutral-400; }
+  .panel-body > .table-container { @apply border-0 rounded-none; }
+  .panel-body > .related-links + .text-link { @apply mt-4 block text-xs; }
+}
+@media(max-width:900px){.workspace-layout{grid-template-columns:170px minmax(0,1fr)}.sidebar{padding-left:10px;padding-right:10px}main{padding:28px 20px 0}.metrics-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.capture-caption{display:none}}
+@media(max-width:640px){.workspace-layout{display:block}.sidebar{border-right:0;border-bottom:1px solid #e5e5e5;padding:8px 16px}.sidebar>.sidebar-caption,.sidebar-note,.navigation .sidebar-caption{display:none}.navigation{flex-direction:row;overflow-x:auto;gap:3px}.nav-link{padding:9px 11px;flex-shrink:0}.summary-grid{grid-template-columns:1fr}.command-heading{align-items:flex-start}.command-heading .button{font-size:10px;padding:5px 8px}}
+
+/* Navigation has the same visible hierarchy on desktop and narrow screens. */
+@layer components {
+  .workspace-layout { @apply grid-cols-[240px_minmax(0,1fr)]; }
+  .sidebar { @apply px-3 pt-7; }
+  .navigation { @apply flex-col gap-6; }
+  .nav-group { @apply flex flex-col gap-1; }
+  .nav-group-label { @apply mb-2 px-3 text-[10px] font-medium uppercase tracking-wider text-neutral-400; }
+  .nav-link { @apply flex items-center gap-3 rounded-lg px-3 py-3; }
+  .nav-link > svg { @apply size-4 shrink-0 text-neutral-500; }
+  .nav-copy { @apply flex min-w-0 flex-col gap-1; }
+  .nav-title { @apply text-xs font-medium text-neutral-700; }
+  .nav-hint { @apply text-[10px] font-normal text-neutral-400; }
+  .nav-link.selected { @apply bg-black; }
+  .nav-link.selected .nav-title, .nav-link.selected > svg { @apply text-white; }
+  .nav-link.selected .nav-hint { @apply text-neutral-300; }
+  .navigation-toggle { display:none; }
+  .connection { @apply min-w-32; }
+  .capture { @apply min-h-16 min-w-44; }
+  .capture-caption { @apply min-h-4; }
+  .inventory-freshness, .history-status { @apply min-h-8; }
+}
+@media(max-width:900px){.workspace-layout{grid-template-columns:210px minmax(0,1fr)}.sidebar{padding-left:8px;padding-right:8px}.nav-link{gap:9px;padding:11px 10px}.capture{min-width:150px}}
+@media(max-width:640px){
+  .workspace-layout{display:block}
+  .sidebar{padding:0 16px}
+  .navigation-toggle{display:flex;width:100%;min-height:52px;align-items:center;justify-content:space-between;background:white;border:0;padding:12px 4px;font-size:12px;text-align:left}
+  .navigation-toggle>span:last-child{color:#737373;font-size:11px}
+  #current-section{font-weight:600}
+  .navigation{display:none;flex-direction:column;gap:20px;overflow:visible;padding:4px 0 20px}
+  .navigation.is-open{display:flex}
+  .nav-link{flex-shrink:1;white-space:normal}
+  .nav-group-label{display:block}
+  .capture{min-width:120px;min-height:60px}
+  .capture-caption{display:block;max-width:125px;text-align:right;font-size:9px}
+  .header-inner{height:68px;flex-wrap:nowrap;gap:10px}
+  .header-divider{display:none}
+  .brand{font-size:17px}
+  .server-select{max-width:none}
+}
+@layer components {
+  .read-warning { @apply fixed right-5 bottom-5 z-10 m-0 max-w-[calc(100vw-40px)] rounded-md border border-neutral-200 bg-white px-3 py-2 text-[11px] text-neutral-600 shadow-sm; }
+}
+@layer components {
+  .site-header { @apply sticky top-0 z-20; }
+  .sidebar { @apply sticky self-start overflow-y-auto pb-6; top:80px;height:calc(100dvh - 80px);max-height:calc(100dvh - 80px); }
+  .navigation { @apply gap-5; }
+  .nav-link { @apply py-2.5; }
+}
+@media(max-width:640px){.sidebar{position:static;height:auto;max-height:none;overflow:visible;padding-bottom:0}.nav-link{padding:11px 10px}}
+@layer components {
+  .series-value { @apply min-h-14; }
+  .chart-placeholder { @apply mt-3 mb-0 flex h-20 items-center; }
+}
+
+/* Controller navigation stays small; opening an app replaces it with that app's sections. */
+@layer components {
+  .workspace-layout { @apply grid-cols-[200px_minmax(0,1fr)]; }
+  .nav-group-label { @apply normal-case tracking-normal text-xs; overflow-wrap:anywhere; }
+  .back-to-controller { @apply mb-2 block px-3 text-[11px] text-neutral-500 hover:text-black; }
+  .navigation { @apply gap-4; }
+  .nav-link { @apply gap-2.5 py-3; }
+  .sidebar-note { @apply mt-8 max-w-40; }
+  .application-summary { @apply mb-5 text-xs text-neutral-500; }
+  .application-grid { @apply grid grid-cols-2 gap-5 xl:grid-cols-3; }
+  .application-card { @apply flex min-w-0 flex-col rounded-xl border border-neutral-200 bg-white p-5 transition-colors hover:border-neutral-400 hover:bg-neutral-50; }
+  .application-card-top { @apply mb-5 flex items-center justify-between gap-3; }
+  .application-symbol { @apply flex size-10 items-center justify-center rounded-lg border border-neutral-200 bg-neutral-50 text-base font-medium; }
+  .application-card .app-name { @apply text-base font-semibold; overflow-wrap:anywhere; }
+  .application-address { @apply mt-2 truncate text-xs text-neutral-500; }
+  .application-card-bottom { @apply mt-7 flex items-center justify-between gap-4 border-t border-neutral-100 pt-4 text-[10px] text-neutral-500; }
+  .application-card-bottom>span:first-child { @apply truncate; }
+  .application-card-bottom>span:last-child { @apply shrink-0 text-neutral-800; }
+  .settings-destinations { @apply mb-8 grid grid-cols-2 gap-3; }
+  .settings-destination { @apply flex flex-col gap-2 rounded-lg border border-neutral-200 p-4 text-xs hover:bg-neutral-50; }
+  .settings-destination>span { @apply text-[11px] text-neutral-500; }
+  .page-heading { @apply mb-7; }
+}
+@media(max-width:900px){.workspace-layout{grid-template-columns:180px minmax(0,1fr)}.application-grid{grid-template-columns:1fr 1fr}}
+@media(max-width:640px){.workspace-layout{display:block}.application-grid,.settings-destinations{grid-template-columns:1fr}.navigation .back-to-controller{margin-top:8px}.application-card{padding:20px}}
+@layer components {
+  .settings-disclosure { @apply mb-3 rounded-lg border border-neutral-200; }
+  .settings-disclosure>summary { @apply cursor-pointer px-5 py-4 text-xs font-medium; }
+  .settings-disclosure>.detail-panel { @apply mb-0 border-0; }
+}
+
+@layer components {
+  .application-name-row { @apply flex min-w-0 flex-wrap items-center gap-2; }
+  .workload-type { @apply shrink-0 rounded border border-neutral-200 bg-neutral-50 px-1.5 py-0.5 text-[9px] font-medium text-neutral-600; }
+}
+@layer components {
+  .history-toolbar { @apply mb-3 flex flex-wrap items-end gap-3 rounded-lg border border-neutral-200 bg-neutral-50 p-4; }
+  .history-toolbar>.field-label:first-child { @apply min-w-48 flex-1; }
+  .history-toolbar .filter-input { @apply min-h-9; }
+  .history-toolbar>.button { @apply min-h-9; }
+  .history-custom { @apply flex w-full flex-wrap gap-3 border-t border-neutral-200 pt-3; }
+  .history-controls { @apply mb-3 flex flex-wrap gap-2; }
+  .history-entries { @apply mb-4 rounded-lg border border-neutral-200; height:clamp(240px,48dvh,560px); overflow:auto; overscroll-behavior:contain; scrollbar-gutter:stable; padding-bottom:24px; scroll-padding-bottom:24px; }
+  .history-entries:focus-visible { outline:2px solid #737373; outline-offset:2px; }
+  .history-entry { @apply border-b border-neutral-100 last:border-0; }
+  .history-entry>summary { @apply grid cursor-pointer grid-cols-[160px_48px_minmax(0,1fr)] items-start gap-3 px-4 py-3 hover:bg-neutral-50; }
+  .history-time { @apply font-mono text-[10px] leading-relaxed text-neutral-500; }
+  .history-level { @apply text-[9px] font-medium uppercase text-neutral-600; }
+  .history-message { @apply truncate font-mono text-[11px]; }
+  .history-entry-detail { @apply grid gap-3 border-t border-neutral-100 bg-neutral-50 px-5 py-4 text-xs; }
+  .history-entry-detail .code-block { @apply m-0 whitespace-pre-wrap; overflow-wrap:anywhere; }
+  .history-status { @apply mb-4 text-[10px] leading-relaxed text-neutral-500; }
+  .history-retention { @apply mt-4 mb-5 text-[10px] leading-relaxed text-neutral-500; }
+}
+@media(max-width:640px){.history-toolbar>.field-label{width:100%}.history-entry>summary{grid-template-columns:1fr auto;gap:6px}.history-message{grid-column:1/-1}.history-custom{flex-direction:column}.history-controls .button{flex-grow:1}}

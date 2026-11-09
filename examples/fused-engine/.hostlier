@@ -1,0 +1,85 @@
+version: 2
+name: fused-engine
+source:
+  # Pin an Engine release digest for production; planning pins this tag for approval.
+  image: ghcr.io/usefused/engine:latest
+primaryEndpoint: http
+endpoints:
+  http:
+    exposure: public
+    port: 8081
+    route: https://engine.apps.example.com
+    protocol: http
+    httpVersions: [h1, h2, h3]
+    streaming: true
+    websocket: true
+    idleTimeoutSeconds: 600
+  sdk-grpc:
+    exposure: public
+    port: 50051
+    route: https://grpc.apps.example.com
+    protocol: grpc
+    idleTimeoutSeconds: 600
+    grpc:
+      services:
+        engine.v1.EngineService:
+          methods:
+            Connect: {}
+            Disconnect: {}
+            Execute: {}
+            StartConnectSession: {}
+            GetConnection: {}
+            ListConnectionResources: {}
+            SubscribeWebhooks:
+              idleTimeoutSeconds: 3600
+  bridge-grpc:
+    exposure: public
+    port: 50051
+    route: https://grpc.apps.example.com/fused.bridge.v1.BridgeService
+    protocol: grpc
+    grpc:
+      services:
+        fused.bridge.v1.BridgeService:
+          idleTimeoutSeconds: 3600
+          methods:
+            Connect: {}
+configs:
+  engine:
+    file: engine.yaml
+    mount: /app/engine.yaml
+secrets:
+  FUSED_LICENSE_KEY: secret://fused-engine-license
+  FUSED_ENCRYPTION_KEY: secret://fused-engine-encryption
+  FUSED_DATABASE_URL: secret://fused-engine-database
+volumes:
+  data:
+    mount: /app/data
+    size: 2Gi
+resources:
+  cpu: "1"
+  memory: 1536Mi
+health:
+  path: /health
+  timeoutSeconds: 120
+sidecars:
+  postgres:
+    source:
+      image: postgres:16-alpine
+    endpoint:
+      exposure: loopback
+      port: 5432
+    env:
+      POSTGRES_USER: fused
+      POSTGRES_DB: fused
+    secrets:
+      POSTGRES_PASSWORD: secret://fused-engine-postgres
+    volumes:
+      database:
+        mount: /var/lib/postgresql/data
+        size: 2Gi
+    resources:
+      cpu: "0.5"
+      memory: 256Mi
+    health:
+      exec: [pg_isready, -U, fused, -d, fused]
+      timeoutSeconds: 60

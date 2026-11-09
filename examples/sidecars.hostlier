@@ -1,0 +1,46 @@
+version: 2
+name: sidecar-demo
+source:
+  image: busybox:1.37.0
+workload: service
+endpoint:
+  exposure: public
+  port: 8080
+  route: sidecars.apps.example.com
+command: [sh, -c]
+args:
+  - mkdir -p /tmp/web; wget -qO /tmp/web/index.html "$BACKEND_URL"; exec httpd -f -p 8080 -h /tmp/web
+bindings:
+  BACKEND_URL: sidecars.backend.url
+health:
+  path: /
+sidecars:
+  backend:
+    source:
+      image: busybox:1.37.0
+    workload: service
+    endpoint:
+      exposure: loopback
+      port: 8081
+    command: [sh, -c]
+    args:
+      - mkdir -p /tmp/backend; echo 'Hello from an ordinary application sidecar' > /tmp/backend/index.html; exec httpd -f -p 127.0.0.1:8081 -h /tmp/backend
+    health:
+      exec: [wget, -qO-, http://127.0.0.1:8081/]
+    resources:
+      cpu: "0.1"
+      memory: 32Mi
+  worker:
+    source:
+      image: busybox:1.37.0
+    workload: worker
+    endpoint:
+      exposure: none
+    command: [sh, -c]
+    args:
+      - touch /tmp/ready; while true; do echo 'background worker is running'; sleep 30; done
+    health:
+      exec: [test, -f, /tmp/ready]
+    resources:
+      cpu: "0.1"
+      memory: 16Mi

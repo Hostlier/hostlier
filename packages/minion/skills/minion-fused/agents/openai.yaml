@@ -1,0 +1,4 @@
+interface:
+  display_name: "Minion Fused Connections"
+  short_description: "Connect Minion actions to Fused over gRPC"
+  default_prompt: "Use $minion-fused to connect this Minion app to selected Fused operations."

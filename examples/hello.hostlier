@@ -1,0 +1,9 @@
+version: 1
+name: hello
+image: nginx:1.28-alpine
+port: 80
+health:
+  path: /
+resources:
+  cpu: "0.5"
+  memory: 128Mi

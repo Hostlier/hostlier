@@ -1,0 +1,28 @@
+# Versions match the official otelcol-contrib v0.164.0 release manifest:
+# core v0.164.0, stable core v1.70.0, contrib v0.164.1.
+# k8sattributesprocessor is a stable component: v1.3.1 in the shipped binary.
+dist:
+  module: hostlier.local/collector
+  name: hostlier-collector
+  description: Hostlier shared runtime telemetry collector
+  version: 0.164.0-minimal
+  output_path: ./dist/generated
+  build_tags: grpcnotrace
+  debug_compilation: false
+extensions:
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/extension/observer/dockerobserver v0.164.1
+receivers:
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/dockerstatsreceiver v0.164.1
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/filelogreceiver v0.164.1
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/receivercreator v0.164.1
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/kubeletstatsreceiver v0.164.1
+processors:
+  - gomod: go.opentelemetry.io/collector/processor/memorylimiterprocessor v0.164.0
+  - gomod: go.opentelemetry.io/collector/processor/batchprocessor v0.164.0
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/processor/filterprocessor v0.164.1
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/processor/k8sattributesprocessor v1.3.1
+exporters:
+  - gomod: go.opentelemetry.io/collector/exporter/otlphttpexporter v0.164.0
+providers:
+  - gomod: go.opentelemetry.io/collector/confmap/provider/envprovider v1.70.0
+  - gomod: go.opentelemetry.io/collector/confmap/provider/fileprovider v1.70.0

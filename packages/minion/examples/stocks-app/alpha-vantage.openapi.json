@@ -1,0 +1,84 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Alpha Vantage Stock Data",
+    "version": "1.0.0",
+    "description": "Private contract for the documented GLOBAL_QUOTE and TIME_SERIES_DAILY functions. Source: https://www.alphavantage.co/documentation/ . The deployment uses the provider public IBM demo credential."
+  },
+  "servers": [
+    {
+      "url": "https://www.alphavantage.co"
+    }
+  ],
+  "paths": {
+    "/query": {
+      "get": {
+        "operationId": "getStockData",
+        "summary": "Get a stock quote or compact daily price history",
+        "externalDocs": {
+          "url": "https://www.alphavantage.co/documentation/"
+        },
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "function",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "GLOBAL_QUOTE",
+                "TIME_SERIES_DAILY"
+              ]
+            }
+          },
+          {
+            "name": "symbol",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "outputsize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "compact"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Provider quote or daily series object; rate-limit and invalid-symbol messages can also be returned with HTTP 200.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "apiKey": {
+        "type": "apiKey",
+        "in": "query",
+        "name": "apikey"
+      }
+    }
+  }
+}

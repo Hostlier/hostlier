@@ -1,0 +1,274 @@
+{
+  "resourceMetrics": [
+    {
+      "resource": {
+        "attributes": [
+          {
+            "key": "container.runtime",
+            "value": {
+              "stringValue": "docker"
+            }
+          },
+          {
+            "key": "container.hostname",
+            "value": {
+              "stringValue": "fixture"
+            }
+          },
+          {
+            "key": "container.id",
+            "value": {
+              "stringValue": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+          },
+          {
+            "key": "container.image.name",
+            "value": {
+              "stringValue": "debian:bookworm-slim"
+            }
+          },
+          {
+            "key": "container.name",
+            "value": {
+              "stringValue": "hostlier-fixture-worker"
+            }
+          },
+          {
+            "key": "hostlier.managed",
+            "value": {
+              "stringValue": "true"
+            }
+          }
+        ]
+      },
+      "scopeMetrics": [
+        {
+          "scope": {
+            "name": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/dockerstatsreceiver",
+            "version": "0.164.0"
+          },
+          "metrics": [
+            {
+              "name": "container.cpu.usage.kernelmode",
+              "description": "Time spent by tasks of the cgroup in kernel mode (Linux).  Time spent by all container processes in kernel mode (Windows).",
+              "unit": "ns",
+              "sum": {
+                "dataPoints": [
+                  {
+                    "startTimeUnixNano": "1793291204421035478",
+                    "timeUnixNano": "1793291205540608322",
+                    "asInt": "11033000"
+                  }
+                ],
+                "aggregationTemporality": 2,
+                "isMonotonic": true
+              }
+            },
+            {
+              "name": "container.cpu.usage.total",
+              "description": "Total CPU time consumed.",
+              "unit": "ns",
+              "sum": {
+                "dataPoints": [
+                  {
+                    "startTimeUnixNano": "1793291204421035478",
+                    "timeUnixNano": "1793291205540608322",
+                    "asInt": "16048000"
+                  }
+                ],
+                "aggregationTemporality": 2,
+                "isMonotonic": true
+              }
+            },
+            {
+              "name": "container.cpu.usage.usermode",
+              "description": "Time spent by tasks of the cgroup in user mode (Linux).  Time spent by all container processes in user mode (Windows).",
+              "unit": "ns",
+              "sum": {
+                "dataPoints": [
+                  {
+                    "startTimeUnixNano": "1793291204421035478",
+                    "timeUnixNano": "1793291205540608322",
+                    "asInt": "5015000"
+                  }
+                ],
+                "aggregationTemporality": 2,
+                "isMonotonic": true
+              }
+            },
+            {
+              "name": "container.cpu.utilization",
+              "description": "Percent of CPU used by the container.",
+              "unit": "1",
+              "gauge": {
+                "dataPoints": [
+                  {
+                    "startTimeUnixNano": "1793291204421035478",
+                    "timeUnixNano": "1793291205540608322",
+                    "asDouble": 0.00015803784123932864
+                  }
+                ]
+              }
+            },
+            {
+              "name": "container.memory.file",
+              "description": "Amount of memory used to cache filesystem data, including tmpfs and shared memory (Only available with cgroups v2).",
+              "unit": "By",
+              "sum": {
+                "dataPoints": [
+                  {
+                    "startTimeUnixNano": "1793291204421035478",
+                    "timeUnixNano": "1793291205540608322",
+                    "asInt": "0"
+                  }
+                ],
+                "aggregationTemporality": 2
+              }
+            },
+            {
+              "name": "container.memory.percent",
+              "description": "Percentage of memory used. Not supported on Windows.",
+              "unit": "1",
+              "gauge": {
+                "dataPoints": [
+                  {
+                    "startTimeUnixNano": "1793291204421035478",
+                    "timeUnixNano": "1793291205540608322",
+                    "asDouble": 0.01460576927886515
+                  }
+                ]
+              }
+            },
+            {
+              "name": "container.memory.usage.limit",
+              "description": "Memory limit of the container. Not supported on Windows.",
+              "unit": "By",
+              "sum": {
+                "dataPoints": [
+                  {
+                    "startTimeUnixNano": "1793291204421035478",
+                    "timeUnixNano": "1793291205540608322",
+                    "asInt": "4094382080"
+                  }
+                ],
+                "aggregationTemporality": 2
+              }
+            },
+            {
+              "name": "container.memory.usage.total",
+              "description": "Memory usage of the container. This excludes the cache.",
+              "unit": "By",
+              "sum": {
+                "dataPoints": [
+                  {
+                    "startTimeUnixNano": "1793291204421035478",
+                    "timeUnixNano": "1793291205540608322",
+                    "asInt": "598016"
+                  }
+                ],
+                "aggregationTemporality": 2
+              }
+            },
+            {
+              "name": "container.network.io.usage.rx_bytes",
+              "description": "Bytes received by the container.",
+              "unit": "By",
+              "sum": {
+                "dataPoints": [
+                  {
+                    "attributes": [
+                      {
+                        "key": "interface",
+                        "value": {
+                          "stringValue": "eth0"
+                        }
+                      }
+                    ],
+                    "startTimeUnixNano": "1793291204421035478",
+                    "timeUnixNano": "1793291205540608322",
+                    "asInt": "2330"
+                  }
+                ],
+                "aggregationTemporality": 2,
+                "isMonotonic": true
+              }
+            },
+            {
+              "name": "container.network.io.usage.rx_dropped",
+              "description": "Incoming packets dropped.",
+              "unit": "{packets}",
+              "sum": {
+                "dataPoints": [
+                  {
+                    "attributes": [
+                      {
+                        "key": "interface",
+                        "value": {
+                          "stringValue": "eth0"
+                        }
+                      }
+                    ],
+                    "startTimeUnixNano": "1793291204421035478",
+                    "timeUnixNano": "1793291205540608322",
+                    "asInt": "0"
+                  }
+                ],
+                "aggregationTemporality": 2,
+                "isMonotonic": true
+              }
+            },
+            {
+              "name": "container.network.io.usage.tx_bytes",
+              "description": "Bytes sent.",
+              "unit": "By",
+              "sum": {
+                "dataPoints": [
+                  {
+                    "attributes": [
+                      {
+                        "key": "interface",
+                        "value": {
+                          "stringValue": "eth0"
+                        }
+                      }
+                    ],
+                    "startTimeUnixNano": "1793291204421035478",
+                    "timeUnixNano": "1793291205540608322",
+                    "asInt": "84"
+                  }
+                ],
+                "aggregationTemporality": 2,
+                "isMonotonic": true
+              }
+            },
+            {
+              "name": "container.network.io.usage.tx_dropped",
+              "description": "Outgoing packets dropped.",
+              "unit": "{packets}",
+              "sum": {
+                "dataPoints": [
+                  {
+                    "attributes": [
+                      {
+                        "key": "interface",
+                        "value": {
+                          "stringValue": "eth0"
+                        }
+                      }
+                    ],
+                    "startTimeUnixNano": "1793291204421035478",
+                    "timeUnixNano": "1793291205540608322",
+                    "asInt": "0"
+                  }
+                ],
+                "aggregationTemporality": 2,
+                "isMonotonic": true
+              }
+            }
+          ]
+        }
+      ],
+      "schemaUrl": "https://opentelemetry.io/schemas/1.43.0"
+    }
+  ]
+}

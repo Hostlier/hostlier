@@ -1,0 +1,4 @@
+version: 1
+domains:
+  - example.com
+  - apps.example.net

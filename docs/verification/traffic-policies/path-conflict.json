@@ -1,0 +1,5 @@
+{
+  "rejected": true,
+  "exitCode": 1,
+  "message": "Hostlier: Route https://probe.cli.127.0.0.1.nip.io/sse conflicts with application \"protocol-probe\" endpoint \"http\" at https://probe.cli.127.0.0.1.nip.io; choose another hostname or path"
+}

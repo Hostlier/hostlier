@@ -1,0 +1,16 @@
+{
+  "name": "@hostlier/ui",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test test/*.test.js",
+    "audit:vm": "node audit-vm.mjs"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "4.3.3",
+    "esbuild": "0.28.2",
+    "linkedom": "0.18.14",
+    "tailwindcss": "4.3.3"
+  }
+}

@@ -1,0 +1,169 @@
+name: Build Hostlier CLI
+
+# Shared packages and module changes trigger both workflows. Exclusive packages
+# are excluded below; new packages default to both until their ownership is known.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/hostlier-cli.yml'
+      - 'go.mod'
+      - 'go.sum'
+      - 'Makefile'
+      - 'scripts/check-binary-boundaries.sh'
+      - 'cmd/hostlier/**'
+      - 'internal/**'
+      - 'pkg/**'
+      - 'test/**'
+      - '!internal/controller/**'
+      - '!internal/controllercmd/**'
+      - '!internal/emailauth/**'
+      - '!internal/engineoauth/**'
+      - '!internal/observation/**'
+      - '!internal/recovery/**'
+      - '!internal/resourceclient/**'
+      - '!internal/runtime/**'
+      - '!internal/store/**'
+      - '!internal/telemetry/**'
+      - '!pkg/resourceprotocol/**'
+      - '!internal/quality/**'
+      - 'ui/**'
+      - 'scripts/package-cli.sh'
+      - 'scripts/package-minion.sh'
+      - 'packages/minion/**'
+      - 'packages/vendor/fused-runtime/**'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/hostlier-cli.yml'
+      - 'go.mod'
+      - 'go.sum'
+      - 'Makefile'
+      - 'scripts/check-binary-boundaries.sh'
+      - 'cmd/hostlier/**'
+      - 'internal/**'
+      - 'pkg/**'
+      - 'test/**'
+      - '!internal/controller/**'
+      - '!internal/controllercmd/**'
+      - '!internal/emailauth/**'
+      - '!internal/engineoauth/**'
+      - '!internal/observation/**'
+      - '!internal/recovery/**'
+      - '!internal/resourceclient/**'
+      - '!internal/runtime/**'
+      - '!internal/store/**'
+      - '!internal/telemetry/**'
+      - '!pkg/resourceprotocol/**'
+      - '!internal/quality/**'
+      - 'ui/**'
+      - 'scripts/package-cli.sh'
+      - 'scripts/package-minion.sh'
+      - 'packages/minion/**'
+      - 'packages/vendor/fused-runtime/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hostlier-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: .
+    shell: bash
+
+jobs:
+  test:
+    name: Controller and CLI regression tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: '1.27.3'
+          cache-dependency-path: go.sum
+      - name: Verify locked dependencies
+        run: |
+          go mod download
+          go mod verify
+      - name: Verify separate executable dependencies
+        run: ./scripts/check-binary-boundaries.sh
+      - name: Static checks and race tests
+        run: |
+          go vet ./...
+          go test -race -mod=readonly ./...
+
+  cli:
+    name: CLI / ${{ matrix.os }} / ${{ matrix.arch }}
+    needs: test
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            os: linux
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            os: linux
+            arch: arm64
+          - runner: macos-15-intel
+            os: darwin
+            arch: amd64
+          - runner: macos-14
+            os: darwin
+            arch: arm64
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: '1.27.3'
+          cache-dependency-path: go.sum
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24.21.0'
+          cache: npm
+          cache-dependency-path: |
+            packages/minion/package-lock.json
+      - name: Build CLI archive
+        env:
+          TARGET_OS: ${{ matrix.os }}
+          TARGET_ARCH: ${{ matrix.arch }}
+        run: ./scripts/package-cli.sh "$TARGET_OS" "$TARGET_ARCH"
+      - name: Verify archive and run CLI on its native platform
+        env:
+          TARGET_OS: ${{ matrix.os }}
+          TARGET_ARCH: ${{ matrix.arch }}
+        run: |
+          archive="hostlier-cli-${TARGET_OS}-${TARGET_ARCH}.tar.gz"
+          (cd dist/releases && shasum -a 256 -c "${archive}.sha256")
+          mkdir -p "$RUNNER_TEMP/hostlier-cli"
+          tar -xzf "dist/releases/$archive" -C "$RUNNER_TEMP/hostlier-cli"
+          "$RUNNER_TEMP/hostlier-cli/hostlier" help
+          "$RUNNER_TEMP/hostlier-cli/hostlier" skills list
+          "$RUNNER_TEMP/hostlier-cli/hostlier" minion --help
+          mkdir "$RUNNER_TEMP/mini-app"
+          state="$(cd "$RUNNER_TEMP" && pwd -P)/state"
+          "$RUNNER_TEMP/hostlier-cli/hostlier" package install minion --file "$RUNNER_TEMP/hostlier-cli/packages/minion" --state-dir "$state"
+          "$RUNNER_TEMP/hostlier-cli/hostlier" init --package minion --state-dir "$state" --directory "$RUNNER_TEMP/mini-app"
+          test -f "$RUNNER_TEMP/mini-app/minion.json"
+          tar -tzf "dist/releases/$archive" | grep -E '^minion/fused-minion-[0-9].*\.tgz$'
+      - name: Upload CLI and checksum
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: hostlier-cli-${{ matrix.os }}-${{ matrix.arch }}
+          path: |
+            dist/releases/hostlier-cli-${{ matrix.os }}-${{ matrix.arch }}.tar.gz
+            dist/releases/hostlier-cli-${{ matrix.os }}-${{ matrix.arch }}.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0

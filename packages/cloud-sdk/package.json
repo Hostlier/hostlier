@@ -1,0 +1,13 @@
+{
+  "name": "@hostlier/cloud-sdk",
+  "version": "0.1.0",
+  "description": "Manage customer Hostlier applications from a bundled .hostlier template",
+  "type": "module",
+  "engines": { "node": ">=24" },
+  "exports": {
+    ".": { "types": "./index.d.ts", "import": "./index.js" }
+  },
+  "files": ["index.js", "controller.js", "index.d.ts", "README.md"],
+  "scripts": { "test": "node --test test/*.test.js" },
+  "dependencies": { "yaml": "2.9.1" }
+}

@@ -1,0 +1,6 @@
+[project]
+name = "hostlier-ollama-agent"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+# LiteLLM's OpenAI request path imports MCP types even when no MCP tools are used.
+dependencies = ["mcp>=2.2,<3"]

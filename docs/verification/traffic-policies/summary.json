@@ -1,0 +1,18 @@
+{
+  "vm": "hostlier-cli-deploy",
+  "caddyVersion": "2.11.7",
+  "nginxVersion": "1.24.0",
+  "engineRevision": "82ed486832a6b7e495abea5e5c0a971c70285febc679260caa1bc50df19077e8",
+  "databaseRuntimeIdPreserved": true,
+  "caddyTestCount": 11,
+  "nginxClientTestCount": 10,
+  "uiTests": 33,
+  "fullGoSuitePassed": true,
+  "affectedRaceTestsPassed": true,
+  "sourceQuality": "findings outside the traffic-policy implementation",
+  "binaries": {
+    "linuxArm64": "38dcac9696ec168985ee1e7d75a00e849950abe671f1d46361f1752fdc1ff29e",
+    "macosArm64": "605873e005bd5df11299937484f0525737ebf61feb3e3701f04c1f1211a0e11b"
+  },
+  "workspaceNote": "Unrelated controller/CLI packaging edits appeared concurrently after the recorded full-suite run; they were preserved. The deployed binary hashes identify the tested builds."
+}

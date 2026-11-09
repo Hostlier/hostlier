@@ -1,0 +1,8 @@
+{
+  "name": "jamjam",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@fused/minion": "file:.minion/framework/fused-minion-0.1.0.tgz"
+  }
+}

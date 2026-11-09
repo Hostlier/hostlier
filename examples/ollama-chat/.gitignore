@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.test/
+.env*
+*.token
+.local/
+
+# Deployment origins are private local configuration.
+/.hostlier

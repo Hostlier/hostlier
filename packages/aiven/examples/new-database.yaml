@@ -1,0 +1,8 @@
+version: 1
+app: analytics
+name: primary
+engine: postgres
+mode: new-database
+database: analytics
+connectionSecret: shared-aiven-postgres-admin-url
+outputSecret: analytics-database-url

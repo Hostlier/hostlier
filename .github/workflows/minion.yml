@@ -1,0 +1,26 @@
+name: Minion framework
+on:
+  pull_request:
+    paths: ['packages/minion/**', 'packages/vendor/fused-runtime/**', '.github/workflows/minion.yml']
+  push:
+    branches: [main]
+    paths: ['packages/minion/**', 'packages/vendor/fused-runtime/**', '.github/workflows/minion.yml']
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '24.21.0'
+          cache: npm
+          cache-dependency-path: |
+            packages/minion/package-lock.json
+      - run: npm ci --prefix packages/minion
+      - run: npm --prefix packages/minion test
+      - run: npm --prefix packages/minion run pack -- --pack-destination "$RUNNER_TEMP/minion-release"

@@ -1,0 +1,32 @@
+version: 1
+name: analytics
+image: ghcr.io/acme/analytics:1.0
+port: 3000
+route: analytics.example.com
+workflow:
+  steps:
+    - id: instance
+      package: aiven
+      config:
+        engine: postgres
+        mode: new-instance
+        instance:
+          project: your-aiven-project
+          service: analytics-postgres
+          plan: your-reviewed-plan
+          cloud: your-reviewed-cloud-region
+      secrets:
+        apiToken: aiven-api-token
+    - id: database
+      package: postgres
+      needs: [instance]
+      config:
+        mode: new-database
+        database: analytics
+      inputs:
+        connection: instance.connection
+        caCertificatePEM: instance.caCertificatePEM
+  bindings:
+    DATABASE_URL: database.url
+    # The app must explicitly support a PEM environment value for its TLS trust.
+    DATABASE_CA_PEM: database.caCertificatePEM

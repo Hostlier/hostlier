@@ -1,0 +1,6 @@
+{
+  "engineUrl": "https://engine.example.com",
+  "consumerVersionId": "REPLACE_WITH_IMMUTABLE_CONSUMER_VERSION_UUID",
+  "operation": "unified_app:database_deploy",
+  "userRef": "hostlier-production"
+}

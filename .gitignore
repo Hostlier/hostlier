@@ -1,0 +1,40 @@
+dist/
+/hostlier
+releases/
+.test-output/
+*.log
+ui/node_modules/
+
+# Retain workspace-wide artifact and private-state exclusions after extraction.
+node_modules/
+dist/
+*.tgz
+.hosting/
+.env
+.hosting-example/
+.pulumi-sdk-test-*/
+
+# Native releases and private local runtime state stay outside source control.
+releases/
+.env.*
+!.env.example
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+*.pem
+*.key
+.DS_Store
+.fused-hosting/
+keys/
+*.sqlite3
+*.sqlite3-*
+
+# Downloaded CI release assets are generated artifacts.
+release-assets/
+
+# Local Fused planning receipts are generated workspace state.
+.fused/.state/
+
+# Engine-owned runtime distribution is a pinned dependency, not a local build artifact.
+!/packages/vendor/fused-runtime/*.tgz

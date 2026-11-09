@@ -1,0 +1,657 @@
+{
+  "resourceMetrics": [
+    {
+      "resource": {
+        "attributes": [
+          {
+            "key": "k8s.pod.uid",
+            "value": {
+              "stringValue": "11111111-2222-3333-4444-555555555555"
+            }
+          },
+          {
+            "key": "k8s.pod.name",
+            "value": {
+              "stringValue": "worker"
+            }
+          },
+          {
+            "key": "k8s.namespace.name",
+            "value": {
+              "stringValue": "hostlier-collector-test-workload"
+            }
+          },
+          {
+            "key": "k8s.node.name",
+            "value": {
+              "stringValue": "fixture-node"
+            }
+          },
+          {
+            "key": "hostlier.application",
+            "value": {
+              "stringValue": "collector-fixture"
+            }
+          },
+          {
+            "key": "hostlier.runtime_revision",
+            "value": {
+              "stringValue": "fixture-revision"
+            }
+          }
+        ]
+      },
+      "scopeMetrics": [
+        {
+          "scope": {
+            "name": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/kubeletstatsreceiver",
+            "version": "0.164.0"
+          },
+          "metrics": [
+            {
+              "name": "k8s.pod.cpu.time",
+              "description": "Total cumulative CPU time (sum of all cores) spent by the container/pod/node since its creation",
+              "unit": "s",
+              "sum": {
+                "dataPoints": [
+                  {
+                    "startTimeUnixNano": "1793291242000000000",
+                    "timeUnixNano": "1793291262342037130",
+                    "asDouble": 0.037204
+                  }
+                ],
+                "aggregationTemporality": 2,
+                "isMonotonic": true
+              }
+            },
+            {
+              "name": "k8s.pod.filesystem.available",
+              "description": "Pod filesystem available",
+              "unit": "By",
+              "gauge": {
+                "dataPoints": [
+                  {
+                    "startTimeUnixNano": "1793291242000000000",
+                    "timeUnixNano": "1793291262342037130",
+                    "asInt": "5369823232"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "k8s.pod.filesystem.capacity",
+              "description": "Pod filesystem capacity",
+              "unit": "By",
+              "gauge": {
+                "dataPoints": [
+                  {
+                    "startTimeUnixNano": "1793291242000000000",
+                    "timeUnixNano": "1793291262342037130",
+                    "asInt": "11362635776"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "k8s.pod.filesystem.usage",
+              "description": "Pod filesystem usage",
+              "unit": "By",
+              "gauge": {
+                "dataPoints": [
+                  {
+                    "startTimeUnixNano": "1793291242000000000",
+                    "timeUnixNano": "1793291262342037130",
+                    "asInt": "86016"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "k8s.pod.memory.major_page_faults",
+              "description": "Pod memory major_page_faults",
+              "unit": "1",
+              "gauge": {
+                "dataPoints": [
+                  {
+                    "startTimeUnixNano": "1793291242000000000",
+                    "timeUnixNano": "1793291262342037130",
+                    "asInt": "21"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "k8s.pod.memory.page_faults",
+              "description": "Pod memory page_faults",
+              "unit": "1",
+              "gauge": {
+                "dataPoints": [
+                  {
+                    "startTimeUnixNano": "1793291242000000000",
+                    "timeUnixNano": "1793291262342037130",
+                    "asInt": "6148"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "k8s.pod.memory.rss",
+              "description": "Pod memory rss",
+              "unit": "By",
+              "gauge": {
+                "dataPoints": [
+                  {
+                    "startTimeUnixNano": "1793291242000000000",
+                    "timeUnixNano": "1793291262342037130",
+                    "asInt": "569344"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "k8s.pod.memory.usage",
+              "description": "Pod memory usage",
+              "unit": "By",
+              "gauge": {
+                "dataPoints": [
+                  {
+                    "startTimeUnixNano": "1793291242000000000",
+                    "timeUnixNano": "1793291262342037130",
+                    "asInt": "4329472"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "k8s.pod.memory.working_set",
+              "description": "Pod memory working_set",
+              "unit": "By",
+              "gauge": {
+                "dataPoints": [
+                  {
+                    "startTimeUnixNano": "1793291242000000000",
+                    "timeUnixNano": "1793291262342037130",
+                    "asInt": "4218880"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "k8s.pod.network.errors",
+              "description": "Pod network errors",
+              "unit": "1",
+              "sum": {
+                "dataPoints": [
+                  {
+                    "attributes": [
+                      {
+                        "key": "interface",
+                        "value": {
+                          "stringValue": "eth0"
+                        }
+                      },
+                      {
+                        "key": "direction",
+                        "value": {
+                          "stringValue": "receive"
+                        }
+                      }
+                    ],
+                    "startTimeUnixNano": "1793291242000000000",
+                    "timeUnixNano": "1793291262342037130",
+                    "asInt": "0"
+                  },
+                  {
+                    "attributes": [
+                      {
+                        "key": "interface",
+                        "value": {
+                          "stringValue": "eth0"
+                        }
+                      },
+                      {
+                        "key": "direction",
+                        "value": {
+                          "stringValue": "transmit"
+                        }
+                      }
+                    ],
+                    "startTimeUnixNano": "1793291242000000000",
+                    "timeUnixNano": "1793291262342037130",
+                    "asInt": "0"
+                  }
+                ],
+                "aggregationTemporality": 2,
+                "isMonotonic": true
+              }
+            },
+            {
+              "name": "k8s.pod.network.io",
+              "description": "Pod network IO",
+              "unit": "By",
+              "sum": {
+                "dataPoints": [
+                  {
+                    "attributes": [
+                      {
+                        "key": "interface",
+                        "value": {
+                          "stringValue": "eth0"
+                        }
+                      },
+                      {
+                        "key": "direction",
+                        "value": {
+                          "stringValue": "receive"
+                        }
+                      }
+                    ],
+                    "startTimeUnixNano": "1793291242000000000",
+                    "timeUnixNano": "1793291262342037130",
+                    "asInt": "2531"
+                  },
+                  {
+                    "attributes": [
+                      {
+                        "key": "interface",
+                        "value": {
+                          "stringValue": "eth0"
+                        }
+                      },
+                      {
+                        "key": "direction",
+                        "value": {
+                          "stringValue": "transmit"
+                        }
+                      }
+                    ],
+                    "startTimeUnixNano": "1793291242000000000",
+                    "timeUnixNano": "1793291262342037130",
+                    "asInt": "542"
+                  }
+                ],
+                "aggregationTemporality": 2,
+                "isMonotonic": true
+              }
+            }
+          ]
+        }
+      ],
+      "schemaUrl": "https://opentelemetry.io/schemas/1.43.0"
+    },
+    {
+      "resource": {
+        "attributes": [
+          {
+            "key": "k8s.pod.uid",
+            "value": {
+              "stringValue": "11111111-2222-3333-4444-555555555555"
+            }
+          },
+          {
+            "key": "k8s.pod.name",
+            "value": {
+              "stringValue": "worker"
+            }
+          },
+          {
+            "key": "k8s.namespace.name",
+            "value": {
+              "stringValue": "hostlier-collector-test-workload"
+            }
+          },
+          {
+            "key": "k8s.container.name",
+            "value": {
+              "stringValue": "helper"
+            }
+          },
+          {
+            "key": "hostlier.application",
+            "value": {
+              "stringValue": "collector-fixture"
+            }
+          },
+          {
+            "key": "hostlier.runtime_revision",
+            "value": {
+              "stringValue": "fixture-revision"
+            }
+          },
+          {
+            "key": "k8s.node.name",
+            "value": {
+              "stringValue": "fixture-node"
+            }
+          }
+        ]
+      },
+      "scopeMetrics": [
+        {
+          "scope": {
+            "name": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/kubeletstatsreceiver",
+            "version": "0.164.0"
+          },
+          "metrics": [
+            {
+              "name": "container.cpu.time",
+              "description": "Total cumulative CPU time (sum of all cores) spent by the container/pod/node since its creation",
+              "unit": "s",
+              "sum": {
+                "dataPoints": [
+                  {
+                    "startTimeUnixNano": "1793291243000000000",
+                    "timeUnixNano": "1793291262342037130",
+                    "asDouble": 0.013935
+                  }
+                ],
+                "aggregationTemporality": 2,
+                "isMonotonic": true
+              }
+            },
+            {
+              "name": "container.filesystem.available",
+              "description": "Container filesystem available",
+              "unit": "By",
+              "gauge": {
+                "dataPoints": [
+                  {
+                    "startTimeUnixNano": "1793291243000000000",
+                    "timeUnixNano": "1793291262342037130",
+                    "asInt": "5369823232"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "container.filesystem.capacity",
+              "description": "Container filesystem capacity",
+              "unit": "By",
+              "gauge": {
+                "dataPoints": [
+                  {
+                    "startTimeUnixNano": "1793291243000000000",
+                    "timeUnixNano": "1793291262342037130",
+                    "asInt": "11362635776"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "container.filesystem.usage",
+              "description": "Container filesystem usage",
+              "unit": "By",
+              "gauge": {
+                "dataPoints": [
+                  {
+                    "startTimeUnixNano": "1793291243000000000",
+                    "timeUnixNano": "1793291262342037130",
+                    "asInt": "36864"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "container.memory.major_page_faults",
+              "description": "Container memory major_page_faults",
+              "unit": "1",
+              "gauge": {
+                "dataPoints": [
+                  {
+                    "startTimeUnixNano": "1793291243000000000",
+                    "timeUnixNano": "1793291262342037130",
+                    "asInt": "0"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "container.memory.page_faults",
+              "description": "Container memory page_faults",
+              "unit": "1",
+              "gauge": {
+                "dataPoints": [
+                  {
+                    "startTimeUnixNano": "1793291243000000000",
+                    "timeUnixNano": "1793291262342037130",
+                    "asInt": "2615"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "container.memory.rss",
+              "description": "Container memory rss",
+              "unit": "By",
+              "gauge": {
+                "dataPoints": [
+                  {
+                    "startTimeUnixNano": "1793291243000000000",
+                    "timeUnixNano": "1793291262342037130",
+                    "asInt": "262144"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "container.memory.usage",
+              "description": "Container memory usage",
+              "unit": "By",
+              "gauge": {
+                "dataPoints": [
+                  {
+                    "startTimeUnixNano": "1793291243000000000",
+                    "timeUnixNano": "1793291262342037130",
+                    "asInt": "561152"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "container.memory.working_set",
+              "description": "Container memory working_set",
+              "unit": "By",
+              "gauge": {
+                "dataPoints": [
+                  {
+                    "startTimeUnixNano": "1793291243000000000",
+                    "timeUnixNano": "1793291262342037130",
+                    "asInt": "561152"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "schemaUrl": "https://opentelemetry.io/schemas/1.43.0"
+    },
+    {
+      "resource": {
+        "attributes": [
+          {
+            "key": "k8s.pod.uid",
+            "value": {
+              "stringValue": "11111111-2222-3333-4444-555555555555"
+            }
+          },
+          {
+            "key": "k8s.pod.name",
+            "value": {
+              "stringValue": "worker"
+            }
+          },
+          {
+            "key": "k8s.namespace.name",
+            "value": {
+              "stringValue": "hostlier-collector-test-workload"
+            }
+          },
+          {
+            "key": "k8s.container.name",
+            "value": {
+              "stringValue": "main"
+            }
+          },
+          {
+            "key": "k8s.node.name",
+            "value": {
+              "stringValue": "fixture-node"
+            }
+          },
+          {
+            "key": "hostlier.application",
+            "value": {
+              "stringValue": "collector-fixture"
+            }
+          },
+          {
+            "key": "hostlier.runtime_revision",
+            "value": {
+              "stringValue": "fixture-revision"
+            }
+          }
+        ]
+      },
+      "scopeMetrics": [
+        {
+          "scope": {
+            "name": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/kubeletstatsreceiver",
+            "version": "0.164.0"
+          },
+          "metrics": [
+            {
+              "name": "container.cpu.time",
+              "description": "Total cumulative CPU time (sum of all cores) spent by the container/pod/node since its creation",
+              "unit": "s",
+              "sum": {
+                "dataPoints": [
+                  {
+                    "startTimeUnixNano": "1793291243000000000",
+                    "timeUnixNano": "1793291262342037130",
+                    "asDouble": 0.020498
+                  }
+                ],
+                "aggregationTemporality": 2,
+                "isMonotonic": true
+              }
+            },
+            {
+              "name": "container.filesystem.available",
+              "description": "Container filesystem available",
+              "unit": "By",
+              "gauge": {
+                "dataPoints": [
+                  {
+                    "startTimeUnixNano": "1793291243000000000",
+                    "timeUnixNano": "1793291262342037130",
+                    "asInt": "5369823232"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "container.filesystem.capacity",
+              "description": "Container filesystem capacity",
+              "unit": "By",
+              "gauge": {
+                "dataPoints": [
+                  {
+                    "startTimeUnixNano": "1793291243000000000",
+                    "timeUnixNano": "1793291262342037130",
+                    "asInt": "11362635776"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "container.filesystem.usage",
+              "description": "Container filesystem usage",
+              "unit": "By",
+              "gauge": {
+                "dataPoints": [
+                  {
+                    "startTimeUnixNano": "1793291243000000000",
+                    "timeUnixNano": "1793291262342037130",
+                    "asInt": "36864"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "container.memory.major_page_faults",
+              "description": "Container memory major_page_faults",
+              "unit": "1",
+              "gauge": {
+                "dataPoints": [
+                  {
+                    "startTimeUnixNano": "1793291243000000000",
+                    "timeUnixNano": "1793291262342037130",
+                    "asInt": "21"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "container.memory.page_faults",
+              "description": "Container memory page_faults",
+              "unit": "1",
+              "gauge": {
+                "dataPoints": [
+                  {
+                    "startTimeUnixNano": "1793291243000000000",
+                    "timeUnixNano": "1793291262342037130",
+                    "asInt": "2939"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "container.memory.rss",
+              "description": "Container memory rss",
+              "unit": "By",
+              "gauge": {
+                "dataPoints": [
+                  {
+                    "startTimeUnixNano": "1793291243000000000",
+                    "timeUnixNano": "1793291262342037130",
+                    "asInt": "262144"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "container.memory.usage",
+              "description": "Container memory usage",
+              "unit": "By",
+              "gauge": {
+                "dataPoints": [
+                  {
+                    "startTimeUnixNano": "1793291243000000000",
+                    "timeUnixNano": "1793291262342037130",
+                    "asInt": "3518464"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "container.memory.working_set",
+              "description": "Container memory working_set",
+              "unit": "By",
+              "gauge": {
+                "dataPoints": [
+                  {
+                    "startTimeUnixNano": "1793291243000000000",
+                    "timeUnixNano": "1793291262342037130",
+                    "asInt": "3407872"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "schemaUrl": "https://opentelemetry.io/schemas/1.43.0"
+    }
+  ]
+}

@@ -1,0 +1,59 @@
+{
+  "resourceLogs": [
+    {
+      "resource": {
+        "attributes": [
+          {
+            "key": "container.name",
+            "value": {
+              "stringValue": "hostlier-fixture-worker"
+            }
+          },
+          {
+            "key": "container.id",
+            "value": {
+              "stringValue": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+          }
+        ]
+      },
+      "scopeLogs": [
+        {
+          "scope": {
+            "name": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/filelogreceiver",
+            "version": "0.164.0"
+          },
+          "logRecords": [
+            {
+              "timeUnixNano": "1793291205160035431",
+              "observedTimeUnixNano": "1793291205282388826",
+              "body": {
+                "stringValue": "hostlier-log-fixture\n"
+              },
+              "attributes": [
+                {
+                  "key": "log.file.name",
+                  "value": {
+                    "stringValue": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-json.log"
+                  }
+                },
+                {
+                  "key": "log.file.path",
+                  "value": {
+                    "stringValue": "/var/lib/docker/containers/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-json.log"
+                  }
+                },
+                {
+                  "key": "log.iostream",
+                  "value": {
+                    "stringValue": "stdout"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

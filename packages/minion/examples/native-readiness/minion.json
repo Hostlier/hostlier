@@ -1,0 +1,23 @@
+{
+  "entry": "app.ts",
+  "outdir": "build-1.0.0",
+  "name": "native-readiness",
+  "image": "registry.example.com/native-readiness:1.0.0",
+  "baseImage": "node:24.21.0-bookworm-slim",
+  "route": "readiness.example.com",
+  "fused": {
+    "engineUrl": "http://127.0.0.1:28081",
+    "grpcUrl": "http://127.0.0.1:15051",
+    "version": "1.0.0",
+    "tokenSecret": "native-readiness-runtime-v1",
+    "services": {
+      "probe": {
+        "service": "local-readiness",
+        "version": "1.0.0",
+        "operations": [
+          "ReadStatus"
+        ]
+      }
+    }
+  }
+}

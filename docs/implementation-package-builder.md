@@ -1,0 +1,33 @@
+# Package builder implementation
+
+Implemented without changing protocol v1 `Handler`/`Describer` or importing engine SDK dependencies into the controller.
+
+`pkg/packagekit.Define` constructs generic `Definition[C,P,S,O]` handlers with explicit public schema metadata, strict typed codecs and optional author validation, Plan/Apply/Inspect/Reconcile callbacks, declared secret aliases and explicit public/private output mapping. Prepared values are wrapped in a SHA-256 identity of the complete request intent, including stable operation key, configuration, private inputs/secrets, previous state and host context. Applying or inspecting changed intent fails before callbacks. This identity does not replace controller approval or artifact encryption. Schemas are explicit discovery metadata; constraint validation belongs in the codec's Validate callback, rather than a reflection-based JSON Schema implementation.
+
+Public reviews are bounded and reject literal resolved secret values. Typed results validate state and output codecs, reject undeclared aliases or ambiguous visibility, and preserve the existing workflow output contract. Review authors must still construct redacted summaries: literal filtering cannot identify transformed secrets. The package runner and Serve now share a 4 MiB request/response limit; Serve checks the entire response before writing.
+
+`pkg/packagekit/protected` provides owner-only host-selected storage, persistent AES-GCM encryption, immutable random artifact handles, content hashes, expiry and equality checks across owner/operation/config/executable/bundle/source/backend/state bindings. Adapters must populate all relevant binding fields. Store roots reject symlink redirects. Disposable workspaces isolate concurrent invocations; exclusive per-owner locks fail closed after abandoned operations and require investigation rather than automatic replay. Encrypted artifacts are retained on disk; expiry prevents use but physical retention cleanup remains an administrator responsibility.
+
+Pinned bundles validate the complete platform/file checksum manifest, reject untracked/missing/changed/redirected files, derive a stable manifest digest, and copy pinned sources into fresh protected workspaces. Direct argv execution accepts only tracked tools, clears inherited environment, admits scoped provider credential namespaces, discards stderr and bounds private stdout. Packages and their administrator-installed bundles remain trusted code, not sandboxed project programs. No arbitrary project path or shell command field was added.
+
+Validation passed locally:
+
+```
+GOCACHE=/private/tmp/hostlier-builder-gocache go test -count=1 ./pkg/packagekit/... ./internal/packageexec
+```
+
+The tests cover typed config/unknown fields, undeclared secrets, private outputs; encrypted restart recovery, cross-operation binding, altered expiry, actual expiration, ciphertext tampering, isolated workspaces and owner locking; changed/missing/symlink bundle files and environment injection. A real built Go executable is installed and invoked through Runner for plan/successful apply and a simulated lost apply response after durable completion. Pinned inspection restores only the same owner/operation/artifact receipt, and changed config invalidates preparation. No Terraform/Pulumi CLI or cloud conformance is claimed by this fixture.
+
+Final review follow-up: bundle materialization now retains only source owner-execute permission (0700 executable files, 0600 source files), so pinned Go Pulumi programs and provider plugins remain runnable. File-copy order and explicit credential environment order are sorted. Regression tests cover permissions, exclusive destination creation, deterministic environment ordering and NUL rejection. Definitions reject duplicate/unsafe capability aliases and schemas that cannot serialize; direct typed dispatch also enforces protocol version and operation key.
+
+The current builder, encrypted store, bundle and actual executable transport fixture passed `go test -race -count=1 ./pkg/packagekit/... ./internal/packageexec` and `go vet ./pkg/packagekit/... ./internal/packageexec` with the private temporary Go cache. This includes real plan/apply, durable lost-response recovery inspection, changed-intent rejection and private-output handling.
+
+## Durable asynchronous planning
+
+Workflow deployment review now uses `POST /v1/planning` with `{ "requestId": "stable-client-id", "request": { "spec": { ... }, "action": "deploy" } }`. The controller durably encrypts the complete request intent before returning a job receipt or starting a provider inspection. `GET /v1/planning/{id}` returns only that authenticated actor's status and, on completion, the existing immutable deployment plan. Reusing the same actor/request ID reconnects to the same job; changed intent is rejected. Preparing or polling a job never grants apply authority. The existing fingerprint and explicit approval route remain mandatory.
+
+The CLI selects this path for workflow deployments, retries lost acceptance responses with the same request ID and reconnects polling automatically. Preparation progress goes to stderr and clearly states that deployment is not approved. Nonworkflow deployment plans retain the synchronous protocol; an older controller's explicit NOT_FOUND response alone permits synchronous compatibility fallback.
+
+Controller `Options.PlanningTimeout` and executable `Runner.PlanTimeout` replace the former 25/30-second provider planning limits. Preparation defaults to ten minutes, accepts shorter administrator/test budgets, and has a hard one-hour ceiling independent of HTTP deadlines. Background work uses controller lifetime rather than caller connection lifetime. A server generation change invalidates the entire planning snapshot; restart marks queued/running jobs interrupted and never replays provider apply. Retained planning jobs are bounded to 1,000 entries; administrators currently need state retention management before that capacity is exhausted.
+
+Real HTTP/HTTPS race tests verify reconnect/idempotency, encrypted pending intent in SQLite/WAL, provider timeout with a 30ms fixture budget, generation invalidation, restart without replay, and no apply before exact explicit approval. The CLI HTTPS fixture deliberately drops both acceptance and polling connections and verifies a single original request identity and a single approval/apply. Full `go test -race -count=1 ./internal/controller ./internal/cli ./internal/packageexec` passed. Focused source quality checks enforce maximum complexity ten and required function/type/control-flow comments.

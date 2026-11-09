@@ -1,0 +1,4 @@
+interface:
+  display_name: "Minion Apps"
+  short_description: "Build Fused-connected Minion apps with JSX UIs"
+  default_prompt: "Use $minion-app to build a Minion app with typed Fused actions and an optional JSX UI."

@@ -1,0 +1,512 @@
+package cloudsdk
+
+import (
+	"bytes"
+	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/tls"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"os"
+	"regexp"
+	"strconv"
+	"strings"
+	"time"
+)
+
+// apiRunner uses the same controller routes and signed device transcript as the CLI.
+// The CLI is needed only to enroll and export this credential, never at runtime.
+type apiRunner struct {
+	origin string
+	token  string
+	key    ed25519.PrivateKey
+	http   *http.Client
+}
+
+type apiFailure struct {
+	Code, Message string
+	Cause         error
+}
+
+// planRejectedError means the controller rejected the plan before any
+// deployment approval or operation could be accepted.
+type planRejectedError struct{ error }
+
+var sdkStoredSecretName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_.-]{0,127}$`)
+
+func (e *apiFailure) Error() string { return e.Code + ": " + e.Message }
+func (e *apiFailure) Unwrap() error { return e.Cause }
+
+func newAPIRunner(credentialFile string) (*apiRunner, error) {
+	if credentialFile == "" {
+		return nil, errors.New("credential file is required for direct controller access")
+	}
+	info, err := os.Lstat(credentialFile)
+	if err != nil {
+		return nil, fmt.Errorf("inspect controller credential file: %w", err)
+	}
+	if !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 || info.Size() > 8192 {
+		return nil, errors.New("credential file must be a private regular file")
+	}
+	raw, err := os.ReadFile(credentialFile)
+	if err != nil {
+		return nil, fmt.Errorf("read controller credential file: %w", err)
+	}
+	var file struct {
+		ControllerURL string `json:"controllerUrl"`
+		Credential    string `json:"credential"`
+	}
+	if json.Unmarshal(raw, &file) != nil {
+		return nil, errors.New("invalid controller credential file")
+	}
+	u, err := url.Parse(file.ControllerURL)
+	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.Path != "" || u.RawQuery != "" || u.Fragment != "" || strings.HasSuffix(u.Host, ".") {
+		return nil, errors.New("controller URL must be an HTTPS origin")
+	}
+	if !strings.HasPrefix(file.Credential, "device-v1:") {
+		return nil, errors.New("controller credential must be a signed device credential")
+	}
+	decoded, err := base64.RawStdEncoding.DecodeString(strings.TrimPrefix(file.Credential, "device-v1:"))
+	var device struct {
+		Token      string `json:"token"`
+		PrivateKey string `json:"privateKey"`
+	}
+	if err != nil || json.Unmarshal(decoded, &device) != nil || device.Token == "" {
+		return nil, errors.New("invalid signed controller credential")
+	}
+	key, err := base64.RawStdEncoding.DecodeString(device.PrivateKey)
+	if err != nil || len(key) != ed25519.PrivateKeySize {
+		return nil, errors.New("invalid signed controller credential")
+	}
+	if !bytes.Equal(ed25519.NewKeyFromSeed(key[:ed25519.SeedSize]), key) {
+		return nil, errors.New("invalid signed controller credential")
+	}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.Proxy = nil
+	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+	return &apiRunner{origin: u.String(), token: device.Token, key: ed25519.PrivateKey(key), http: &http.Client{Transport: transport, Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}, nil
+}
+
+func (a *apiRunner) Run(ctx context.Context, args []string, directory string) (Result, error) {
+	if len(args) == 0 {
+		return Result{}, errors.New("missing Hostlier API action")
+	}
+	switch args[0] {
+	case "validate":
+		path, ok := sdkArgument(args, "--file")
+		if !ok {
+			return Result{}, errors.New("project file is required")
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return Result{}, err
+		}
+		if _, err := parseProject(data); err != nil {
+			return Result{}, err
+		}
+		return Result{Stdout: `{"valid":true}`}, nil
+	case "deploy", "update":
+		path, ok := sdkArgument(args, "--file")
+		if !ok {
+			return Result{}, errors.New("project file is required")
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return Result{}, err
+		}
+		spec, err := parseProject(data)
+		if err != nil {
+			return Result{}, err
+		}
+		if err := lowerStoredReferences(spec, args[0] == "update"); err != nil {
+			return Result{}, &planRejectedError{err}
+		}
+		return a.planAndApply(ctx, spec, "")
+	case "scale":
+		if len(args) < 2 || !appName.MatchString(args[1]) {
+			return Result{}, errors.New("invalid application name")
+		}
+		var app struct {
+			Spec map[string]any `json:"spec"`
+		}
+		if err := a.request(ctx, "GET", "/v1/apps/"+url.PathEscape(args[1]), nil, &app); err != nil {
+			return Result{}, err
+		}
+		if app.Spec == nil {
+			return Result{}, errors.New("controller returned no application specification")
+		}
+		cpu, cpuOK := sdkArgument(args, "--cpu")
+		memory, memoryOK := sdkArgument(args, "--memory")
+		if !cpuOK || !memoryOK {
+			return Result{}, errors.New("CPU and memory are required")
+		}
+		limits, _ := app.Spec["resources"].(map[string]any)
+		if limits == nil {
+			limits = map[string]any{}
+		}
+		limits["cpu"], limits["memory"] = cpu, memory
+		app.Spec["resources"] = limits
+		delete(app.Spec, "autoscaling")
+		delete(app.Spec, "sleepAfter")
+		return a.planAndApply(ctx, app.Spec, "scale")
+	case "status":
+		path := "/v1/status"
+		if len(args) > 1 && args[1] != "--json" {
+			path = "/v1/apps/" + url.PathEscape(args[1])
+		}
+		return a.result(ctx, "GET", path, nil)
+	case "operation":
+		if len(args) < 2 || args[1] == "" {
+			return Result{}, errors.New("operation ID is required")
+		}
+		return a.result(ctx, "GET", "/v1/operations/"+url.PathEscape(args[1]), nil)
+	case "delete":
+		if len(args) < 3 || args[2] != "--purge" || !appName.MatchString(args[1]) {
+			return Result{}, errors.New("explicit application purge is required")
+		}
+		return a.approveAndWait(ctx, "POST", "/v1/apps/"+url.PathEscape(args[1])+"/action", map[string]any{"action": "delete", "purge": true})
+	case "secret":
+		if len(args) >= 3 && args[1] == "delete" && appName.MatchString(args[2]) {
+			return a.approve(ctx, "DELETE", "/v1/secrets/"+url.PathEscape(args[2]), map[string]any{})
+		}
+	}
+	return Result{}, errors.New("unsupported Hostlier SDK API action")
+}
+
+// The CLI lowers secret:// declarations before sending a plan. Controller
+// specifications and saved SDK snapshots instead contain plain secret names.
+func lowerStoredReferences(project map[string]any, allowNormalized bool) error {
+	if bindings, exists := project["secrets"]; exists {
+		secrets, ok := bindings.(map[string]any)
+		if !ok {
+			return errors.New("invalid stored secret bindings")
+		}
+		for key, raw := range secrets {
+			value, ok := raw.(string)
+			if !ok {
+				return errors.New("invalid stored secret binding")
+			}
+			if strings.HasPrefix(value, "secret://") {
+				value = strings.TrimPrefix(value, "secret://")
+			} else if !allowNormalized {
+				return errors.New("cloud bundles require explicit stored secret references")
+			}
+			if !envName.MatchString(key) || !sdkStoredSecretName.MatchString(value) {
+				return errors.New("invalid stored secret binding")
+			}
+			secrets[key] = value
+		}
+	}
+	if raw, exists := project["sidecars"]; exists {
+		sidecars, ok := raw.(map[string]any)
+		if !ok {
+			return errors.New("invalid sidecar bindings")
+		}
+		for _, raw := range sidecars {
+			member, ok := raw.(map[string]any)
+			if !ok {
+				return errors.New("invalid sidecar bindings")
+			}
+			if err := lowerStoredReferences(member, allowNormalized); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (a *apiRunner) RunInput(ctx context.Context, args []string, _ string, input []byte) (Result, error) {
+	if len(args) < 4 || args[0] != "secret" || args[1] != "set" || !appName.MatchString(args[2]) || args[3] != "--stdin" || len(input) == 0 || len(input) > 65536 {
+		return Result{}, errors.New("invalid secret API request")
+	}
+	body := map[string]any{"value": string(input), "requestId": sdkRequestID()}
+	if app, ok := sdkArgument(args, "--app"); ok {
+		if !appName.MatchString(app) {
+			return Result{}, errors.New("invalid owning application name")
+		}
+		body["owner"] = app
+	}
+	return a.approve(ctx, "PUT", "/v1/secrets/"+url.PathEscape(args[2]), body)
+}
+
+func sdkArgument(args []string, flag string) (string, bool) {
+	for i := 0; i+1 < len(args); i++ {
+		if args[i] == flag {
+			return args[i+1], args[i+1] != ""
+		}
+	}
+	return "", false
+}
+
+func sdkRequestID() string {
+	var id [16]byte
+	if _, err := rand.Read(id[:]); err != nil {
+		panic(err)
+	}
+	return hex.EncodeToString(id[:])
+}
+
+func (a *apiRunner) planAndApply(ctx context.Context, spec map[string]any, action string) (Result, error) {
+	body := map[string]any{"spec": spec}
+	if action != "" {
+		body["action"] = action
+	}
+	plan, err := a.reviewedPlan(ctx, body, spec["workflow"] != nil)
+	if err != nil {
+		var failure *apiFailure
+		if errors.As(err, &failure) && (failure.Code == "INVALID_CONFIG" || failure.Code == "IMAGE_RESOLUTION" || failure.Code == "REGISTRY_CREDENTIALS") {
+			return Result{}, &planRejectedError{err}
+		}
+		return Result{}, err
+	}
+	if plan.ID == "" || plan.Fingerprint == "" {
+		return Result{}, errors.New("controller returned an incomplete deployment plan")
+	}
+	return a.approveAndWait(ctx, "POST", "/v1/plans/"+url.PathEscape(plan.ID)+"/apply", map[string]any{"approved": true, "fingerprint": plan.Fingerprint, "requestId": sdkRequestID()})
+}
+
+type sdkPlan struct{ ID, Fingerprint string }
+
+func (a *apiRunner) reviewedPlan(ctx context.Context, body map[string]any, workflow bool) (sdkPlan, error) {
+	var plan sdkPlan
+	if !workflow {
+		return plan, a.request(ctx, "POST", "/v1/plans", body, &plan)
+	}
+	request := map[string]any{"requestId": sdkRequestID(), "request": body}
+	var planning struct {
+		ID     string                          `json:"id"`
+		Status string                          `json:"status"`
+		Plan   sdkPlan                         `json:"plan"`
+		Error  *struct{ Code, Message string } `json:"error"`
+	}
+	for {
+		err := a.request(ctx, "POST", "/v1/planning", request, &planning)
+		if failure, ok := err.(*apiFailure); ok && failure.Code == "NOT_FOUND" {
+			return plan, a.request(ctx, "POST", "/v1/plans", body, &plan)
+		}
+		if failure, ok := err.(*apiFailure); ok && failure.Code == "CONNECTION" {
+			if err := sdkPause(ctx); err != nil {
+				return plan, err
+			}
+			continue
+		}
+		if err != nil {
+			return plan, err
+		}
+		break
+	}
+	if planning.ID == "" {
+		return plan, errors.New("controller returned no planning receipt")
+	}
+	id := planning.ID
+	for planning.Status != "completed" {
+		if planning.Error != nil {
+			return plan, &apiFailure{Code: planning.Error.Code, Message: planning.Error.Message}
+		}
+		if planning.Status != "queued" && planning.Status != "running" {
+			return plan, errors.New("controller planning requires recovery")
+		}
+		if err := sdkPause(ctx); err != nil {
+			return plan, err
+		}
+		err := a.request(ctx, "GET", "/v1/planning/"+url.PathEscape(id), nil, &planning)
+		if failure, ok := err.(*apiFailure); ok && failure.Code == "CONNECTION" {
+			continue
+		}
+		if err != nil {
+			return plan, err
+		}
+		if planning.ID != id {
+			return plan, errors.New("controller returned a different planning job")
+		}
+	}
+	return planning.Plan, nil
+}
+
+func sdkPause(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(time.Second):
+		return nil
+	}
+}
+
+func (a *apiRunner) approveAndWait(ctx context.Context, method, path string, body any) (Result, error) {
+	receipt, err := a.approve(ctx, method, path, body)
+	if err != nil {
+		return receipt, err
+	}
+	var accepted struct {
+		OperationID string `json:"operationId"`
+	}
+	if json.Unmarshal([]byte(receipt.Stdout), &accepted) != nil || accepted.OperationID == "" {
+		return receipt, errors.New("controller returned no operation receipt")
+	}
+	for {
+		var operation struct {
+			Status string                          `json:"status"`
+			Error  *struct{ Code, Message string } `json:"error"`
+		}
+		if err := a.request(ctx, "GET", "/v1/operations/"+url.PathEscape(accepted.OperationID), nil, &operation); err != nil {
+			return receipt, err
+		}
+		switch operation.Status {
+		case "succeeded":
+			return receipt, nil
+		case "failed", "cancelled", "interrupted", "needs_attention", "superseded":
+			if operation.Error != nil && operation.Error.Code != "" {
+				return receipt, &apiFailure{Code: operation.Error.Code, Message: operation.Error.Message}
+			}
+			return receipt, fmt.Errorf("Hostlier operation %s", operation.Status)
+		case "queued", "running":
+		default:
+			return receipt, errors.New("controller returned an unknown operation status")
+		}
+		select {
+		case <-ctx.Done():
+			return receipt, ctx.Err()
+		case <-time.After(time.Second):
+		}
+	}
+}
+
+func (a *apiRunner) approve(ctx context.Context, method, path string, body any) (Result, error) {
+	var approval struct {
+		ID        string `json:"id"`
+		Status    string `json:"status"`
+		ExpiresAt int64  `json:"expiresAt"`
+	}
+	if err := a.request(ctx, "POST", "/v1/approvals", map[string]any{"method": method, "path": path, "body": body}, &approval); err != nil {
+		return Result{}, err
+	}
+	if approval.ID == "" {
+		return Result{}, errors.New("controller returned no approval receipt")
+	}
+	for approval.Status == "pending" && time.Now().UnixMilli() < approval.ExpiresAt {
+		select {
+		case <-ctx.Done():
+			return Result{}, ctx.Err()
+		case <-time.After(time.Second):
+		}
+		if err := a.request(ctx, "GET", "/v1/approvals/"+url.PathEscape(approval.ID), nil, &approval); err != nil {
+			return Result{}, err
+		}
+	}
+	if approval.Status != "approved" && approval.Status != "completed" {
+		return Result{}, fmt.Errorf("controller approval %s requires owner review: %s", approval.Status, approval.ID)
+	}
+	var output json.RawMessage
+	execute := "/v1/approvals/" + url.PathEscape(approval.ID) + "/execute"
+	err := a.request(ctx, "POST", execute, map[string]any{}, &output)
+	if failure, ok := err.(*apiFailure); ok && failure.Code == "CONNECTION" {
+		err = a.request(ctx, "POST", execute, map[string]any{}, &output)
+	}
+	if err != nil {
+		return Result{}, err
+	}
+	return Result{Stdout: string(output)}, nil
+}
+
+func (a *apiRunner) result(ctx context.Context, method, path string, body any) (Result, error) {
+	var output json.RawMessage
+	if err := a.request(ctx, method, path, body, &output); err != nil {
+		return Result{}, err
+	}
+	return Result{Stdout: string(output)}, nil
+}
+
+func (a *apiRunner) request(ctx context.Context, method, path string, body any, output any) error {
+	if !strings.HasPrefix(path, "/v1/") || strings.HasPrefix(path, "//") {
+		return errors.New("invalid controller API path")
+	}
+	var data []byte
+	if body != nil {
+		var err error
+		data, err = json.Marshal(body)
+		if err != nil {
+			return err
+		}
+		if len(data) > maxDocument {
+			return errors.New("controller request exceeds 1 MiB")
+		}
+	}
+	req, err := http.NewRequestWithContext(ctx, method, a.origin+path, bytes.NewReader(data))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Accept", "application/json")
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if err := a.sign(req, data); err != nil {
+		return err
+	}
+	response, err := a.http.Do(req)
+	if err != nil {
+		return &apiFailure{Code: "CONNECTION", Message: "Cannot reach controller: " + err.Error(), Cause: err}
+	}
+	defer response.Body.Close()
+	raw, err := io.ReadAll(io.LimitReader(response.Body, 4*maxDocument+1))
+	if err != nil {
+		return fmt.Errorf("read controller response: %w", err)
+	}
+	if len(raw) > 4*maxDocument {
+		return errors.New("controller response too large")
+	}
+	if response.StatusCode >= 300 {
+		var envelope struct {
+			Error struct{ Code, Message string } `json:"error"`
+		}
+		if json.Unmarshal(raw, &envelope) == nil && envelope.Error.Code != "" {
+			return &apiFailure{Code: envelope.Error.Code, Message: envelope.Error.Message}
+		}
+		return &apiFailure{Code: "CONTROLLER", Message: fmt.Sprintf("Controller request failed (%d)", response.StatusCode)}
+	}
+	if output != nil {
+		if err := json.Unmarshal(raw, output); err != nil {
+			return fmt.Errorf("decode controller response: %w", err)
+		}
+	}
+	return nil
+}
+
+func (a *apiRunner) sign(request *http.Request, body []byte) error {
+	epochRequest, err := http.NewRequestWithContext(request.Context(), "GET", a.origin+"/v1/email/session", nil)
+	if err != nil {
+		return err
+	}
+	epochResponse, err := a.http.Do(epochRequest)
+	if err != nil {
+		return &apiFailure{Code: "CONNECTION", Message: "Cannot obtain controller device session: " + err.Error(), Cause: err}
+	}
+	defer epochResponse.Body.Close()
+	var session struct {
+		Epoch string `json:"epoch"`
+	}
+	if epochResponse.StatusCode != 200 || json.NewDecoder(io.LimitReader(epochResponse.Body, 4096)).Decode(&session) != nil || len(session.Epoch) != 64 {
+		return errors.New("controller returned no valid device session")
+	}
+	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+	nonce := sdkRequestID() + sdkRequestID()
+	hash := sha256.Sum256(body)
+	message := strings.Join([]string{"hostlier-device-v1", session.Epoch, request.Method, request.URL.RequestURI(), timestamp, nonce, hex.EncodeToString(hash[:])}, "\x00")
+	request.Header.Set("Authorization", "Bearer "+a.token)
+	request.Header.Set("X-Hostlier-Epoch", session.Epoch)
+	request.Header.Set("X-Hostlier-Time", timestamp)
+	request.Header.Set("X-Hostlier-Nonce", nonce)
+	request.Header.Set("X-Hostlier-Signature", base64.RawStdEncoding.EncodeToString(ed25519.Sign(a.key, []byte(message))))
+	return nil
+}
+
+// compile-time guard keeps the direct adapter compatible with the SDK state machine.
+var _ Runner = (*apiRunner)(nil)
+var _ InputRunner = (*apiRunner)(nil)

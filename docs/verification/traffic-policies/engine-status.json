@@ -1,0 +1,42 @@
+{
+  "name": "fused-engine",
+  "status": "running",
+  "revision": "82ed486832a6b7e495abea5e5c0a971c70285febc679260caa1bc50df19077e8",
+  "url": "https://engine.cli.127.0.0.1.nip.io",
+  "health": {
+    "status": "ok",
+    "unified_app_worker_ready": true
+  },
+  "databaseRuntimeIdPreserved": true,
+  "policies": {
+    "bridge-grpc": {
+      "route": "https://grpc.cli.127.0.0.1.nip.io/fused.bridge.v1.BridgeService",
+      "protocol": "grpc",
+      "services": {
+        "fused.bridge.v1.BridgeService": [
+          "Connect"
+        ]
+      }
+    },
+    "http": {
+      "route": "https://engine.cli.127.0.0.1.nip.io",
+      "protocol": "http",
+      "services": {}
+    },
+    "sdk-grpc": {
+      "route": "https://grpc.cli.127.0.0.1.nip.io",
+      "protocol": "grpc",
+      "services": {
+        "engine.v1.EngineService": [
+          "Connect",
+          "Disconnect",
+          "Execute",
+          "GetConnection",
+          "ListConnectionResources",
+          "StartConnectSession",
+          "SubscribeWebhooks"
+        ]
+      }
+    }
+  }
+}

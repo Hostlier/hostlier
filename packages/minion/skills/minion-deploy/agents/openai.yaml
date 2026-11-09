@@ -1,0 +1,4 @@
+interface:
+  display_name: "Deploy Minion Apps"
+  short_description: "Build and deploy Minion apps through Hostlier"
+  default_prompt: "Use $minion-deploy to build and deploy this Minion app through Hostlier."

@@ -1,0 +1,116 @@
+{
+  "result": "passed",
+  "date": "2026-11-04",
+  "environment": {
+    "provider": "local Lima",
+    "os": "Ubuntu 24.04 LTS",
+    "arch": "arm64",
+    "vms": [
+      "primary",
+      "secondary",
+      "blue",
+      "green"
+    ],
+    "memory_per_vm": "1 GiB",
+    "tls": "private test CA; certificate and SSH host verification enabled",
+    "installation": "existing Docker and Nginx on fresh guests, Hostlier installed and run by systemd",
+    "software": "CLI and controller built from the current working tree",
+    "network": "private user-v2 network"
+  },
+  "release_archives": {
+    "hostlier-controller-linux-arm64.tar.gz": "cf504c9b81d077d29b0f536102903d6a86e2e488a3dab52eb64fabb14fcd4b44",
+    "hostlier-cli-linux-arm64.tar.gz": "86139a383629f41e3f937ec23833919a14f64559240eaccb1c3e88a389d160a0"
+  },
+  "commands": [
+    "hostlier connect operator@blue.fleet.test",
+    "hostlier connect operator@green.fleet.test",
+    "hostlier server use primary/blue",
+    "hostlier server use green",
+    "hostlier server use primary",
+    "hostlier server use blue",
+    "sudo hostlier-controller connect https://secondary.fleet.test",
+    "hostlier status --server primary --on blue",
+    "hostlier status --server secondary --on blue",
+    "hostlier status --server primary --on green",
+    "sudo systemctl restart hostlier.service"
+  ],
+  "fixture_notes": [
+    "Both SSH adds used an isolated SSH config, staged checksummed archives, and one CLI-initiated SSH session each. Fixture administration was recorded separately.",
+    "A test-only signer checked the retained enrollment record before signing it through the production approval API. Blue\u2019s first installation completed before a fixture decoding error interrupted approval. The retained approval was resumed without opening another bootstrap SSH session. Green completed without interruption.",
+    "On-box device pairing was approved through the new master\u2019s protected administration socket. Its all-access grant authorized enrollment. A physical passkey ceremony was not exercised."
+  ],
+  "observations": [
+    {
+      "action": "Laptop connected to master A",
+      "hostname": "primary.fleet.test"
+    },
+    {
+      "action": "SSH add blue (resumed retained approval)",
+      "ssh_sessions": 1,
+      "workload_hostname": "blue.fleet.test",
+      "fingerprint": "14255398b4be596e55c8303958918ea9072ab31a36c13242059adaad290b604e"
+    },
+    {
+      "action": "SSH add green",
+      "ssh_sessions": 1,
+      "selected": "primary/green",
+      "workload_hostname": "green.fleet.test",
+      "fingerprint": "6042ffbc770618676c7fbce00738d71f194deb2e6f6e0b203d7d0b8419975640"
+    },
+    {
+      "action": "Laptop switched",
+      "selection": "primary/blue",
+      "workload_hostname": "blue.fleet.test"
+    },
+    {
+      "action": "Laptop switched",
+      "selection": "green",
+      "workload_hostname": "green.fleet.test"
+    },
+    {
+      "action": "Laptop switched",
+      "selection": "primary",
+      "workload_hostname": "primary.fleet.test"
+    },
+    {
+      "action": "Laptop switched",
+      "selection": "blue",
+      "workload_hostname": "blue.fleet.test"
+    },
+    {
+      "action": "Old master access just before move",
+      "hostname": "blue.fleet.test"
+    },
+    {
+      "action": "Moved installed blue with hostlier-controller connect",
+      "device_pairing": "approved on secondary protected socket; enrollment authorized by its all-access grant",
+      "new_master": "secondary",
+      "new_master_pin": "11ddca88bfeea5f21d4d11669e73dcad6843b422d0147d002f7164da768889b0",
+      "old_master_pin": "05e9b27d2c90f7fa627935deef201ff7be3abf8f077854a718f7aa4e2826e897",
+      "box_fingerprint": "14255398b4be596e55c8303958918ea9072ab31a36c13242059adaad290b604e",
+      "workload_hostname": "blue.fleet.test"
+    },
+    {
+      "action": "Old master denied despite retained enrollment and reachable port",
+      "old_master_error": "Hostlier: Enrolled host unreachable; inspect its operations before retrying a mutation",
+      "other_box_hostname": "green.fleet.test",
+      "old_enrollment": {
+        "fingerprint": "14255398b4be596e55c8303958918ea9072ab31a36c13242059adaad290b604e",
+        "name": "blue",
+        "url": "https://blue.fleet.test:7464"
+      },
+      "tcp_7464_reachable": true
+    },
+    {
+      "action": "Restart retained the switch",
+      "new_master_hostname": "blue.fleet.test",
+      "old_master_error": "Hostlier: Enrolled host unreachable; inspect its operations before retrying a mutation",
+      "tls_log": "Nov 04 15:59:40 lima-blue hostlier-controller[4503]: 2026/11/04 15:59:40 http: TLS handshake error from 192.168.104.1:57818: EOF\nNov 04 15:59:40 lima-blue hostlier-controller[4503]: 2026/11/04 15:59:40 http: TLS handshake error from 192.168.104.1:57822: fleet peer identity mismatch\nNov 04 15:59:41 lima-blue hostlier-controller[4930]: 2026/11/04 15:59:41 http: TLS handshake error from 192.168.104.1:57838: fleet peer identity mismatch"
+    }
+  ],
+  "cleanup": {
+    "test_vms_deleted": 4,
+    "temporary_keys_and_profiles_removed": true,
+    "digitalocean_resources_created": 0
+  }
+}
