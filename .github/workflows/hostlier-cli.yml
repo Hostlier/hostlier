@@ -117,7 +117,7 @@ jobs:
           - runner: macos-15-intel
             os: darwin
             arch: amd64
-          - runner: macos-14
+          - runner: macos-15
             os: darwin
             arch: arm64
     steps:
