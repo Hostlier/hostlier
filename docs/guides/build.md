@@ -63,7 +63,7 @@ and manual **Run workflow** requests:
 - **Build Hostlier controller** handles controller, installer, runtime, collector
   assets and controller packaging changes. It builds the two Linux server bundles.
 - **Build Hostlier CLI** handles the client, local dashboard, bundled skills and
-  CLI packaging changes. It builds the four Linux/macOS CLI archives.
+  CLI packaging changes. It builds the two Linux CLI archives.
 
 Shared packages, Go module files, the Makefile, boundary checks and integration
 tests trigger both. Documentation-only changes outside embedded skills do not
@@ -81,7 +81,6 @@ Download these artifacts from the completed workflow run:
 | `hostlier-controller-linux-amd64` | Linux AMD64 installation archive, including `collector-image/`, and SHA-256 checksum |
 | `hostlier-controller-linux-arm64` | Linux ARM64 installation archive, including `collector-image/`, and SHA-256 checksum |
 | `hostlier-cli-linux-amd64` / `hostlier-cli-linux-arm64` | Standalone Linux CLI archive and checksum |
-| `hostlier-cli-darwin-amd64` / `hostlier-cli-darwin-arm64` | Standalone macOS CLI archive and checksum |
 
 The two executables have separate entry points and dependency graphs:
 `hostlier` connects, deploys and manages local packages.
@@ -95,8 +94,8 @@ CI checks this separation before building. Controller archives contain
 beside the binary when installing the archive; a symlink to the binary is supported.
 Each CLI is smoke-tested on its native architecture. The controller job checks
 both archives and runs the Linux AMD64 executable.
-Workflow artifacts are retained for 14 days. These workflows do not deploy servers
-or sign/notarize macOS binaries. A version tag matching `v*`
+Workflow artifacts are retained for 14 days. These workflows do not deploy servers.
+A version tag matching `v*`
 also runs the controller workflow's tests and publishes its two checksum-verified
 Linux controller bundles as a GitHub Release. The publish job accepts only the
 official `Hostlier/hostlier` repository, an existing pushed tag, and a
@@ -107,15 +106,16 @@ After downloading and unzipping a GitHub artifact, verify the adjacent checksum
 before extracting its tar archive:
 
 ```sh
-shasum -a 256 -c hostlier-cli-darwin-arm64.tar.gz.sha256
-tar -xzf hostlier-cli-darwin-arm64.tar.gz
+shasum -a 256 -c hostlier-cli-linux-amd64.tar.gz.sha256
+tar -xzf hostlier-cli-linux-amd64.tar.gz
 ./hostlier help
 ```
 
 Use the controller archive for server installation, preserving `collector-image/`
 beside `hostlier-controller`, then run `sudo ./hostlier-controller init`. The
-controller installer does not require or install the CLI. Your laptop needs its own CLI
-archive. Minion development also requires Node.js 24 or newer. Run
+controller installer does not require or install the CLI. Linux CLI archives are
+available from CI; build the CLI from source for macOS. Minion development also
+requires Node.js 24 or newer. Run
 `hostlier minion install` in an app directory to install the bundled framework, or
 run `hostlier minion dev` to install it automatically and start the local app.
 Hostlier preserves its package under `.minion/framework/` so npm can reproduce the
