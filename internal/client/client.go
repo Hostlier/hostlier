@@ -110,6 +110,9 @@ func (c *Client) Request(ctx context.Context, method, path string, body any, res
 	if err := c.authorizeRequest(req, data); err != nil {
 		return err
 	}
+	if c.grpc {
+		return c.rpcCommand(req, data, result, false)
+	}
 	httpClient := c.requestTransport(method, path)
 	response, e := httpClient.Do(req)
 	// Convert transport failures to a safe connection error without leaking response data.
@@ -132,11 +135,7 @@ func RequestID() string {
 
 // decodeResponse bounds response sizes and decodes controller errors consistently.
 func decodeResponse(response *http.Response, path string, result any) error {
-	limit := int64(4 * 1024 * 1024)
-	// Allow the explicitly bounded backup export payload size for export endpoints.
-	if strings.HasSuffix(path, "/export") || strings.HasSuffix(path, "/execute") {
-		limit = 90 * 1024 * 1024
-	}
+	limit := responseLimit(path)
 	raw, e := io.ReadAll(io.LimitReader(response.Body, limit+1))
 	// Translate interrupted reads to a safe connection failure.
 	if e != nil {
@@ -189,4 +188,12 @@ func responseError(status int, raw []byte) error {
 // errorEnvelope accepts only the structured controller error contract.
 type errorEnvelope struct {
 	Error model.Error `json:"error"`
+}
+
+// responseLimit reserves larger replies for approved execution and backup exports.
+func responseLimit(path string) int64 {
+	if strings.HasSuffix(path, "/export") || strings.HasSuffix(path, "/execute") {
+		return 90 << 20
+	}
+	return 4 << 20
 }

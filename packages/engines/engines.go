@@ -79,6 +79,14 @@ func (p Package) validate(req workflow.Request) (Config, error) {
 	if c.Mode == "new-instance" { // Route local instance creation through the owned runtime manager.
 		return c, validateLocal(req, c)
 	}
+	// An omitted PostgreSQL name is scoped to this retained workflow identity.
+	// Explicit names remain available when database identity must outlive an app rename.
+	if p.Engine == "postgres" && c.Mode == "new-database" && c.Database == "" {
+		if req.Step.Phase != "" {
+			return c, errors.New("derived postgres database requires a retained workflow step")
+		}
+		c.Database = identity(req)
+	}
 	return c, p.validateExisting(req, c)
 }
 
@@ -157,9 +165,19 @@ func (p Package) plan(ctx context.Context, req workflow.Request, c Config) (work
 			return workflow.Prepared{}, err
 		}
 	}
+	if p.Engine == "postgres" && c.Mode == "new-database" {
+		if creds.Database != "app" && creds.Database != c.Database {
+			return workflow.Prepared{}, errors.New("previous postgres database differs from reviewed configuration")
+		}
+		creds.Database = c.Database
+	}
 	value := payload{Fingerprint: fingerprint(p.Engine, req), Credentials: creds}
 	raw, _ := json.Marshal(value)
-	return workflow.Prepared{Digest: value.Fingerprint, Summary: []string{"Provision owned " + p.Engine + " access; retain data on app deletion"}, Payload: raw}, nil
+	summary := "Provision owned " + p.Engine + " access; retain data on app deletion"
+	if p.Engine == "postgres" && c.Mode == "new-database" {
+		summary = "Provision PostgreSQL database " + c.Database + " with an owned role; retain data on app deletion"
+	}
+	return workflow.Prepared{Digest: value.Fingerprint, Summary: []string{summary}, Payload: raw}, nil
 }
 
 // manager preserves the server state root for owner-scoped network identities.
@@ -230,7 +248,16 @@ func (p Package) localApply(ctx context.Context, req workflow.Request, c Config,
 func enrich(outputs map[string]string, c model.ResourceCredentials) {
 	u, _ := url.Parse(outputs["url"])
 	outputs["host"] = u.Hostname()
-	outputs["port"] = u.Port()
+	port := u.Port()
+	if port == "" {
+		switch u.Scheme {
+		case "postgres", "postgresql":
+			port = "5432"
+		case "redis", "rediss":
+			port = "6379"
+		}
+	}
+	outputs["port"] = port
 	outputs["username"] = c.Username
 	outputs["password"] = c.Password
 	outputs["database"] = c.Database
@@ -281,6 +308,9 @@ func validatePrepared(req workflow.Request, c Config, p payload) error {
 	password, err := hex.DecodeString(p.Credentials.Password)
 	if err != nil || len(password) != 32 || p.Credentials.Username != expected { // Reject the operation: invalid protected engine credentials.
 		return errors.New("invalid protected engine credentials")
+	}
+	if c.Mode == "new-database" && p.Credentials.Database != c.Database {
+		return errors.New("prepared postgres database differs from reviewed configuration")
 	}
 	return nil
 }
@@ -335,12 +365,30 @@ func validateConnectionTLS(engine string, u *url.URL) error {
 	return nil
 }
 
-// validatePostgresQuery rejects overrides that could retain administrative identity in app URLs.
+// validatePostgresQuery permits only verified TLS, required channel binding, and connection timing.
 func validatePostgresQuery(u *url.URL) error {
-	// Only transport mode and bounded connection timing are meaningful URL options here.
-	for key := range u.Query() {
-		// Provider credentials, host overrides and local certificate paths are not app configuration.
-		if key != "sslmode" && key != "connect_timeout" {
+	query, err := url.ParseQuery(u.RawQuery)
+	if err != nil {
+		return errors.New("postgres URL contains invalid connection options")
+	}
+	for key, values := range query {
+		// Duplicate options can make the provider and Hostlier choose different values.
+		if len(values) != 1 {
+			return errors.New("postgres URL contains duplicate connection options")
+		}
+		switch key {
+		case "sslmode":
+			if values[0] != "verify-full" {
+				return errors.New("postgres connection requires sslmode=verify-full")
+			}
+		case "channel_binding":
+			if values[0] != "require" {
+				return errors.New("postgres channel binding must be required")
+			}
+		case "connect_timeout":
+			// Existing connection timing behavior remains available.
+		default:
+			// Provider credentials, host overrides and local certificate paths are not app configuration.
 			return errors.New("postgres URL contains unsupported connection options; use private caCertificatePEM for trust")
 		}
 	}

@@ -58,7 +58,7 @@ func TestProductCLIApprovalAndBinding(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer server.Close(context.Background())
-	api := workflowAPI{handler: withFixtureHuman(t, server, server.LocalHandler())}
+	api := newWorkflowAPI(t, withFixtureHuman(t, server, server.LocalHandler()))
 	// Store private values through the same API used by ordinary deployments.
 	if err = api.Request(context.Background(), "PUT", "/v1/secrets/fused-token", map[string]any{"value": "private-fused-token", "requestId": "product-upload"}, nil); err != nil {
 		t.Fatal(err)

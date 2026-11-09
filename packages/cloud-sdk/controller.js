@@ -2,8 +2,8 @@ import { createHash, createPrivateKey, createPublicKey, randomBytes, sign, timin
 import { readFile, stat } from 'node:fs/promises';
 import { basename } from 'node:path';
 import YAML from 'yaml';
+import { controllerRPC } from './grpc.js';
 
-const bodyLimit = 4 * 1024 * 1024;
 const keyPrefix = Buffer.from('302e020100300506032b657004220420', 'hex');
 const storedSecretName = /^[A-Za-z_][A-Za-z0-9_.-]{0,127}$/;
 const environmentName = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -62,28 +62,8 @@ function controllerOrigin(value, allowInsecureLocalhost) {
   return url.origin;
 }
 
-async function boundedJSON(response) {
-  const chunks = [];
-  let length = 0;
-  for await (const chunk of response.body ?? []) {
-    length += chunk.length;
-    if (length > bodyLimit) throw new Error('Hostlier response exceeded 4 MiB');
-    chunks.push(chunk);
-  }
-  const raw = Buffer.concat(chunks).toString('utf8');
-  let value;
-  try { value = raw ? JSON.parse(raw) : {}; }
-  catch (cause) { throw new Error('Invalid Hostlier controller response', { cause }); }
-  if (!response.ok) {
-    const error = new Error(typeof value?.error?.message === 'string' ? value.error.message : `Hostlier request failed (${response.status})`);
-    error.code = typeof value?.error?.code === 'string' ? value.error.code : 'CONTROLLER';
-    throw error;
-  }
-  return value;
-}
-
 /** Build an API runner for the same controller routes and approval protocol as the CLI. */
-export async function controllerRunner({ credentialFile, allowInsecureLocalhost = false, fetch: fetchImplementation = fetch }) {
+export async function controllerRunner({ credentialFile, allowInsecureLocalhost = false }) {
   if (typeof credentialFile !== 'string' || !credentialFile) throw new Error('credentialFile is required for direct Hostlier access');
   const info = await stat(credentialFile);
   if (!info.isFile() || info.mode & 0o077) throw new Error('Hostlier credential file must be private (mode 0600)');
@@ -93,49 +73,37 @@ export async function controllerRunner({ credentialFile, allowInsecureLocalhost 
   const origin = controllerOrigin(settings.controllerUrl, allowInsecureLocalhost);
   const device = credential(settings.credential);
 
-  async function fetchJSON(method, path, body, signal, authenticated = true) {
-    if (!path.startsWith('/') || path.startsWith('//')) throw new Error('Invalid Hostlier API path');
+  const rpc = controllerRPC(origin);
+  async function auth(method, path, bytes, signal) {
+    const headers = {};
+    const session = await rpc.command('GET','/v1/email/session',Buffer.alloc(0),{},signal);
+    if (typeof session.epoch !== 'string' || !/^[a-f0-9]{64}$/i.test(session.epoch)) throw new Error('Invalid Hostlier device session');
+    const time = String(Math.floor(Date.now() / 1000));
+    const nonce = randomBytes(32).toString('hex');
+    const digest = createHash('sha256').update(bytes).digest('hex');
+    const message = Buffer.from(['hostlier-device-v1', session.epoch, method, path, time, nonce, digest].join('\0'));
+    headers.authorization = `Bearer ${device.token}`;
+    headers['x-hostlier-epoch'] = session.epoch;
+    headers['x-hostlier-time'] = time;
+    headers['x-hostlier-nonce'] = nonce;
+    headers['x-hostlier-signature'] = sign(null, message, device.key).toString('base64').replace(/=+$/, '');
+    return headers;
+  }
+  async function commandJSON(method, path, body, signal) {
     const bytes = body === undefined ? Buffer.alloc(0) : Buffer.from(JSON.stringify(body));
-    const headers = { accept: 'application/json' };
-    if (body !== undefined) headers['content-type'] = 'application/json';
-    if (authenticated) {
-      const session = await fetchJSON('GET', '/v1/email/session', undefined, signal, false);
-      if (typeof session.epoch !== 'string' || !/^[a-f0-9]{64}$/i.test(session.epoch)) throw new Error('Invalid Hostlier device session');
-      const time = String(Math.floor(Date.now() / 1000));
-      const nonce = randomBytes(32).toString('hex');
-      const digest = createHash('sha256').update(bytes).digest('hex');
-      const message = Buffer.from(['hostlier-device-v1', session.epoch, method, path, time, nonce, digest].join('\0'));
-      headers.authorization = `Bearer ${device.token}`;
-      headers['x-hostlier-epoch'] = session.epoch;
-      headers['x-hostlier-time'] = time;
-      headers['x-hostlier-nonce'] = nonce;
-      headers['x-hostlier-signature'] = sign(null, message, device.key).toString('base64').replace(/=+$/, '');
-    }
-    let response;
-    try {
-      response = await fetchImplementation(origin + path, { method, body: body === undefined ? undefined : bytes, headers, redirect: 'manual', signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30000)]) : AbortSignal.timeout(30000) });
-    } catch (cause) {
-      if (signal?.aborted) throw cause;
-      const error = new Error(`Cannot reach Hostlier controller: ${cause.message}`, { cause });
-      error.code = 'CONNECTION';
-      throw error;
-    }
-    if (response.status >= 300 && response.status < 400) throw new Error('Hostlier controller redirected a credentialed request');
-    return boundedJSON(response);
+    return rpc.command(method,path,bytes,await auth(method,path,bytes,signal),signal);
+  }
+  function watch(kind,id,path,signal) {
+    return rpc.watch(kind,id,path,() => auth('GET',path,Buffer.alloc(0),signal),signal);
   }
 
   async function approved(method, path, body, signal) {
-    let approval = await fetchJSON('POST', '/v1/approvals', { method, path, body }, signal);
+    let approval = await commandJSON('POST', '/v1/approvals', { method, path, body }, signal);
     if (typeof approval.id !== 'string' || !approval.id) throw new Error('Hostlier returned no approval ID');
     const approvalId = approval.id;
-    while (approval.status === 'pending') {
-      if (!Number.isSafeInteger(approval.expiresAt) || approval.expiresAt <= Date.now()) throw new Error(`Hostlier approval ${approvalId} expired or invalid`);
-      await pause(signal);
-      approval = await fetchJSON('GET', `/v1/approvals/${encodeURIComponent(approvalId)}`, undefined, signal);
-      if (approval.id !== approvalId) throw new Error('Hostlier returned a different approval');
-    }
+    if (approval.status === 'pending') approval = await watch('receipt',approvalId,`/v1/approvals/${encodeURIComponent(approvalId)}`,signal);
     if (!['approved', 'completed'].includes(approval.status)) throw new Error(`Hostlier approval ${approvalId} is ${approval.status}`);
-    const execute = () => fetchJSON('POST', `/v1/approvals/${encodeURIComponent(approvalId)}/execute`, {}, signal);
+    const execute = () => commandJSON('POST', `/v1/approvals/${encodeURIComponent(approvalId)}/execute`, {}, signal);
     try { return await execute(); }
     catch (error) {
       if (error.code === 'CONNECTION') return execute();
@@ -145,46 +113,29 @@ export async function controllerRunner({ credentialFile, allowInsecureLocalhost 
 
   async function waitOperation(id, signal) {
     if (typeof id !== 'string' || !id) throw new Error('Hostlier returned no operation ID');
-    for (;;) {
-      const operation = await fetchJSON('GET', `/v1/operations/${encodeURIComponent(id)}`, undefined, signal);
-      if (operation.id !== id) throw new Error('Hostlier returned a different operation');
-      if (['succeeded', 'completed', 'success'].includes(operation.status)) return operation;
-      if (['failed', 'cancelled', 'interrupted', 'needs_attention', 'superseded'].includes(operation.status)) {
-        const error = new Error(`Hostlier operation ${id} ${operation.status}`);
-        error.operationId = id;
-        throw error;
-      }
-      if (!['queued', 'running', 'accepted', 'pending'].includes(operation.status)) throw new Error(`Unknown Hostlier operation status: ${operation.status}`);
-      await pause(signal);
-    }
+    const operation = await watch('operation',id,`/v1/operations/${encodeURIComponent(id)}/events`,signal);
+    if (['succeeded','completed','success'].includes(operation.status)) return operation;
+    const error = new Error(`Hostlier operation ${id} ${operation.status}`);
+    error.operationId = id;
+    throw error;
   }
 
   async function reviewedPlan(body, signal) {
-    if (!body.spec?.workflow) return fetchJSON('POST', '/v1/plans', body, signal);
+    if (!body.spec?.workflow) return commandJSON('POST', '/v1/plans', body, signal);
     const request = { requestId: requestId(), request: body };
     let planning;
     for (;;) {
-      try { planning = await fetchJSON('POST', '/v1/planning', request, signal); break; }
+      try { planning = await commandJSON('POST', '/v1/planning', request, signal); break; }
       catch (error) {
-        if (error.code === 'NOT_FOUND') return fetchJSON('POST', '/v1/plans', body, signal);
         if (error.code !== 'CONNECTION') throw error;
         await pause(signal);
       }
     }
     if (typeof planning.id !== 'string' || !planning.id) throw new Error('Hostlier returned no planning ID');
     const planningId = planning.id;
-    while (planning.status !== 'completed') {
-      if (planning.error) {
-        const error = new Error(planning.error.message ?? 'Hostlier planning failed');
-        error.code = planning.error.code;
-        throw error;
-      }
-      if (!['queued', 'running'].includes(planning.status)) throw new Error('Hostlier planning requires recovery');
-      await pause(signal);
-      try { planning = await fetchJSON('GET', `/v1/planning/${encodeURIComponent(planningId)}`, undefined, signal); }
-      catch (error) { if (error.code !== 'CONNECTION') throw error; }
-      if (planning.id !== planningId) throw new Error('Hostlier returned a different planning job');
-    }
+    if (['queued','running'].includes(planning.status)) planning = await watch('receipt',planningId,`/v1/planning/${encodeURIComponent(planningId)}`,signal);
+    if (planning.error) throw Object.assign(new Error(planning.error.message ?? 'Hostlier planning failed'),{code:planning.error.code});
+    if (planning.status !== 'completed') throw new Error('Hostlier planning requires recovery');
     if (!planning.plan) throw new Error('Hostlier returned no reviewed plan');
     return planning.plan;
   }
@@ -227,7 +178,7 @@ export async function controllerRunner({ credentialFile, allowInsecureLocalhost 
       const cpu = args[args.indexOf('--cpu') + 1];
       const memory = args[args.indexOf('--memory') + 1];
       return plan(async () => {
-        const current = await fetchJSON('GET', `/v1/apps/${encodeURIComponent(target)}`, undefined, signal);
+        const current = await commandJSON('GET', `/v1/apps/${encodeURIComponent(target)}`, undefined, signal);
         const project = structuredClone(current.spec);
         project.resources = { ...(project.resources ?? {}), cpu, memory };
         delete project.sleepAfter;
@@ -236,9 +187,9 @@ export async function controllerRunner({ credentialFile, allowInsecureLocalhost 
       }, 'scale', signal);
     } else if (command === 'status') {
       const path = target === '--json' ? '/v1/status' : `/v1/apps/${encodeURIComponent(target)}`;
-      result = await fetchJSON('GET', path, undefined, signal);
+      result = await commandJSON('GET', path, undefined, signal);
     } else if (command === 'operation') {
-      result = await fetchJSON('GET', `/v1/operations/${encodeURIComponent(target)}`, undefined, signal);
+      result = await commandJSON('GET', `/v1/operations/${encodeURIComponent(target)}`, undefined, signal);
     } else if (command === 'delete') {
       if (!args.includes('--purge')) throw new Error('Cloud SDK only supports permanent deletion');
       const receipt = await approved('POST', `/v1/apps/${encodeURIComponent(target)}/action`, { action: 'delete', purge: true }, signal);

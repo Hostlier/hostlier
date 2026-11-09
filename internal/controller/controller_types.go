@@ -77,4 +77,6 @@ type Controller struct {
 	closed                 bool
 	streams                int
 	eventPersistedSequence uint64
+	operationChange        chan struct{}
+	jobChange              chan struct{}
 }

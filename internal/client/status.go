@@ -44,6 +44,9 @@ func (c *Client) WatchStatus(ctx context.Context, consume func(StatusEvent) erro
 
 // connectStatus opens one bounded SSE connection without forwarding credentials across redirects.
 func (c *Client) connectStatus(ctx context.Context, consume func(StatusEvent) error) error {
+	if c.grpc {
+		return c.connectStatusRPC(ctx, consume)
+	}
 	req, err := http.NewRequestWithContext(ctx, "GET", c.URL+"/v1/status/events", nil)
 	// Invalid client configuration is a permanent local failure.
 	if err != nil {

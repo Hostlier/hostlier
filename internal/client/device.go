@@ -48,7 +48,10 @@ func decodeDeviceCredential(value string) (string, ed25519.PrivateKey, error) {
 
 // authorizeRequest signs the exact body and URL after authenticating the controller's TLS session.
 func (c *Client) authorizeRequest(r *http.Request, body []byte) error {
-	// Apply this check before granting authority or advancing protocol state.
+	return c.authorize(r, body, false)
+}
+
+func (c *Client) authorize(r *http.Request, body []byte, watching bool) error {
 	if c.Token != "" {
 		r.Header.Set("Authorization", "Bearer "+c.Token)
 	}
@@ -56,7 +59,7 @@ func (c *Client) authorizeRequest(r *http.Request, body []byte) error {
 	if len(c.deviceKey) == 0 {
 		return nil
 	}
-	epoch, err := c.currentDeviceEpoch(r)
+	epoch, err := c.currentDeviceEpoch(r, watching)
 	// Propagate failure rather than continuing with incomplete or unverified state.
 	if err != nil {
 		return err
@@ -72,23 +75,28 @@ func (c *Client) authorizeRequest(r *http.Request, body []byte) error {
 }
 
 // currentDeviceEpoch fetches a fresh replay domain per request, including after controller restart.
-func (c *Client) currentDeviceEpoch(parent *http.Request) (string, error) {
+func (c *Client) currentDeviceEpoch(parent *http.Request, watching bool) (string, error) {
 	request, err := http.NewRequestWithContext(parent.Context(), "GET", c.URL+"/v1/email/session", nil)
 	// Propagate failure rather than continuing with incomplete or unverified state.
 	if err != nil {
 		return "", err
 	}
-	response, err := c.HTTP.Do(request)
-	// Reject the request before side effects: Cannot obtain controller device session.
-	if err != nil {
-		return "", model.Err("CONNECTION", "Cannot obtain controller device session")
-	}
-	defer response.Body.Close()
 	var status struct {
 		Epoch string `json:"epoch"`
 	}
-	// Propagate failure rather than continuing with incomplete or unverified state.
-	if err = decodeResponse(response, "/v1/email/session", &status); err != nil {
+	if c.grpc {
+		// This public call is deliberately unsigned to avoid recursive signing.
+		err = c.rpcCommand(request, nil, &status, watching)
+	} else {
+		var response *http.Response
+		response, err = c.HTTP.Do(request)
+		if err != nil {
+			return "", model.Err("CONNECTION", "Cannot obtain controller device session")
+		}
+		defer response.Body.Close()
+		err = decodeResponse(response, "/v1/email/session", &status)
+	}
+	if err != nil {
 		return "", err
 	}
 	// Reject the request before side effects: Controller returned no valid device session.

@@ -3,13 +3,16 @@ module hostlier
 go 1.27.3
 
 require (
+	connectrpc.com/connect v1.19.1
 	github.com/aws/aws-sdk-go-v2 v1.47.5
 	github.com/aws/aws-sdk-go-v2/credentials v1.20.12
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.114.6
 	github.com/go-webauthn/webauthn v0.18.2
 	github.com/jackc/pgx/v5 v5.9.2
 	github.com/redis/go-redis/v9 v9.7.3
+	golang.org/x/mod v0.41.0
 	golang.org/x/term v0.47.0
+	google.golang.org/protobuf v1.36.9
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.36.3
 )

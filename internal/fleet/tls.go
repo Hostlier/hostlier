@@ -116,6 +116,7 @@ func TLS(identity Identity, peerPin string, server bool) (*tls.Config, error) {
 	usage := x509.ExtKeyUsageServerAuth
 	// Apply this check before granting authority or advancing protocol state.
 	if server {
+		cfg.NextProtos = []string{"h2", "http/1.1"}
 		cfg.ClientAuth = tls.RequireAnyClientCert
 		usage = x509.ExtKeyUsageClientAuth
 	} else {

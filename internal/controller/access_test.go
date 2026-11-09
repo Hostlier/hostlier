@@ -22,6 +22,11 @@ func pairedFixture(t *testing.T, c *Controller) (*client.Client, string, string)
 func pairedScopeFixture(t *testing.T, c *Controller, scope deploymentScope) (*client.Client, string, string) {
 	t.Helper()
 	public, private, _ := ed25519.GenerateKey(rand.Reader)
+	return pairWithKey(t, c, scope, public, private)
+}
+
+func pairWithKey(t *testing.T, c *Controller, scope deploymentScope, public ed25519.PublicKey, private ed25519.PrivateKey) (*client.Client, string, string) {
+	t.Helper()
 	status, start := humanHTTP(t, c, false, "POST", "/v1/access/pair/start", map[string]string{"name": "Laptop", "publicKey": base64.RawStdEncoding.EncodeToString(public)}, "", "")
 	// Fail the test when the expected security invariant is violated.
 	if status != 200 {

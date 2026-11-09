@@ -13,13 +13,33 @@ import (
 	"testing"
 	"time"
 
+	"hostlier/internal/client"
 	"hostlier/internal/controller"
 	"hostlier/internal/model"
 	"hostlier/pkg/workflow"
 )
 
 // workflowAPI exercises the real controller handler without requiring a TCP or Unix listener.
-type workflowAPI struct{ handler http.Handler }
+type workflowAPI struct {
+	handler http.Handler
+	*client.Client
+}
+
+// Run watch subscriptions over a real local HTTP/2 connection. Keep the
+// command fixture separate so individual tests can still inject approvals.
+func newWorkflowAPI(t *testing.T, handler http.Handler) workflowAPI {
+	t.Helper()
+	srv := httptest.NewUnstartedServer(handler)
+	srv.EnableHTTP2 = true
+	srv.StartTLS()
+	t.Cleanup(srv.Close)
+	rpc, err := client.NewGRPC(client.Options{URL: srv.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rpc.HTTP = srv.Client()
+	return workflowAPI{handler: handler, Client: rpc}
+}
 
 // Request preserves the CLI request/response contract over an in-process HTTP exchange.
 func (api workflowAPI) Request(ctx context.Context, method, path string, input, output any) error {
@@ -100,7 +120,7 @@ func TestWorkflowCLIEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer c.Close(context.Background())
-	api := workflowAPI{handler: withFixtureHuman(t, c, c.LocalHandler())}
+	api := newWorkflowAPI(t, withFixtureHuman(t, c, c.LocalHandler()))
 	// Upload through the ordinary secret API before constructing the deployment plan.
 	if err := api.Request(context.Background(), "PUT", "/v1/secrets/fused-token", map[string]any{"value": "private-fused-token", "requestId": "upload"}, nil); err != nil {
 		t.Fatal(err)

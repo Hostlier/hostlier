@@ -121,13 +121,13 @@ func (c *Controller) initializeServices() error {
 // Handler exposes the authenticated remote API.
 func (c *Controller) Handler() http.Handler {
 	// Serve remote requests without local administrator privileges.
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { c.handle(w, r, false) })
+	return c.managementHandler(false)
 }
 
 // LocalHandler exposes privileged administration through the protected Unix listener.
 func (c *Controller) LocalHandler() http.Handler {
 	// Serve Unix-socket requests with local administrator privileges.
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { c.handle(w, r, true) })
+	return c.managementHandler(true)
 }
 
 // Address reads the active TCP address under the state lock.
@@ -178,7 +178,9 @@ func (c *Controller) Listen(o ListenOptions) error {
 		c.address = l.Addr().String()
 		// Wrap the listener with configured TLS before accepting remote requests.
 		if o.TLSConfig != nil {
-			l = tls.NewListener(l, o.TLSConfig)
+			cfg := o.TLSConfig.Clone()
+			cfg.NextProtos = []string{"h2", "http/1.1"}
+			l = tls.NewListener(l, cfg)
 		}
 		listeners = append(listeners, l)
 		handlers = append(handlers, c.remoteListenerHandler(o))
@@ -222,6 +224,8 @@ func (c *Controller) Listen(o ListenOptions) error {
 func (c *Controller) Close(ctx context.Context) error {
 	c.mu.Lock()
 	c.closed = true
+	c.signalOperationChange()
+	c.signalJobChange()
 	c.closeTunnels()
 	servers := append([]*http.Server{}, c.servers...)
 	c.mu.Unlock()
@@ -284,6 +288,7 @@ func required(v string) error {
 
 // log retains bounded events and writes protected execution diagnostics.
 func (c *Controller) log(message, op, level string) {
+	c.signalOperationChange()
 	c.state.EventSequence++
 	entry := LogEntry{Sequence: c.state.EventSequence, Timestamp: c.opts.Now().UTC().Format(time.RFC3339Nano), Level: level, Message: message, OperationID: op}
 	if operation := c.state.Operations[op]; operation != nil {
@@ -611,6 +616,10 @@ func (c *Controller) serveListeners(listeners []net.Listener, handlers []http.Ha
 	// Apply listener lifecycle handling to every prepared endpoint.
 	for i, l := range listeners {
 		server := &http.Server{Handler: handlers[i], ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: c.opts.WriteTimeout, MaxHeaderBytes: 16384}
+		server.Protocols = new(http.Protocols)
+		server.Protocols.SetHTTP1(true)
+		server.Protocols.SetHTTP2(true)
+		server.Protocols.SetUnencryptedHTTP2(true)
 		c.servers = append(c.servers, server)
 		go server.Serve(l)
 	}

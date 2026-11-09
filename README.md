@@ -49,6 +49,11 @@ Hostlier resolves the image during planning, asks for deployment approval, and
 serves the app over HTTPS. Publish a new image and run `hostlier app deploy` again
 to update it.
 
+The CLI and Cloud SDKs use gRPC through the saved controller address. When
+upgrading, update the controller and its managed proxy before the CLI, then
+reinstall Cloud SDKs and rebuild backend projects. Custom proxies must forward
+the [controller gRPC route](STREAMING.md) over HTTP/2.
+
 ## Guides
 
 - [Install and connect](docs/guides/install.md)

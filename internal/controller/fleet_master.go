@@ -46,7 +46,7 @@ func (c *Controller) openMasterListener() (net.Listener, http.Handler, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	cfg := &tls.Config{MinVersion: tls.VersionTLS13, GetConfigForClient: func(*tls.ClientHelloInfo) (*tls.Config, error) {
+	cfg := &tls.Config{MinVersion: tls.VersionTLS13, NextProtos: []string{"h2", "http/1.1"}, GetConfigForClient: func(*tls.ClientHelloInfo) (*tls.Config, error) {
 		if peer := c.currentMaster(); peer != nil {
 			return peer.tls, nil
 		}

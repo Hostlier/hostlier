@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -27,7 +26,7 @@ func TestDirectAPIProvisionAndPurgeWithSignedCredential(t *testing.T) {
 	var approvedPath string
 	var exists bool
 	var calls []string
-	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newSDKServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/email/session" {
 			_ = json.NewEncoder(w).Encode(map[string]string{"epoch": epoch})
 			return
@@ -67,8 +66,8 @@ func TestDirectAPIProvisionAndPurgeWithSignedCredential(t *testing.T) {
 			} else {
 				_ = json.NewEncoder(w).Encode(map[string]bool{"stored": true})
 			}
-		case "GET /v1/operations/operation-create", "GET /v1/operations/operation-purge":
-			_ = json.NewEncoder(w).Encode(map[string]string{"status": "succeeded"})
+		case "GET /v1/operations/operation-create/events", "GET /v1/operations/operation-purge/events":
+			_ = json.NewEncoder(w).Encode(map[string]string{"id": strings.Split(r.URL.Path, "/")[3], "status": "succeeded"})
 		case "GET /v1/apps/acme-app":
 			if !exists {
 				w.WriteHeader(http.StatusNotFound)
@@ -128,7 +127,7 @@ func TestDirectAPIProvisionAndPurgeWithSignedCredential(t *testing.T) {
 	if plannedSecrets, ok := planned["secrets"].(map[string]any); !ok || plannedSecrets["API_KEY"] != "vendor-key" {
 		t.Fatal("controller plan did not lower stored secret reference", planned["secrets"])
 	}
-	for _, expected := range []string{"POST /v1/plans", "POST /v1/approvals", "POST /v1/approvals/approval-1/execute", "GET /v1/operations/operation-create", "GET /v1/status"} {
+	for _, expected := range []string{"POST /v1/plans", "POST /v1/approvals", "POST /v1/approvals/approval-1/execute", "GET /v1/operations/operation-create/events", "GET /v1/status"} {
 		if !containsAPI(calls, expected) {
 			t.Fatal("missing direct controller API call", expected, calls)
 		}
@@ -198,7 +197,7 @@ func TestDirectAPIWorkflowUsesDurablePlanning(t *testing.T) {
 	}
 	epoch := strings.Repeat("a", 64)
 	var calls []string
-	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newSDKServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/email/session" {
 			_ = json.NewEncoder(w).Encode(map[string]string{"epoch": epoch})
 			return

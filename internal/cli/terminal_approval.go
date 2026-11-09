@@ -25,7 +25,7 @@ func (s *session) approveCommand() error {
 	}
 	// Apply this check before granting authority or advancing protocol state.
 	if s.flags["url"] != "" {
-		remote, err := client.New(client.Options{URL: s.flags["url"]})
+		remote, err := client.NewGRPC(client.Options{URL: s.flags["url"]})
 		// Propagate failure rather than continuing with incomplete or unverified state.
 		if err != nil {
 			return err

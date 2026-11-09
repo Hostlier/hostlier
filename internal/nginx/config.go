@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"hostlier/internal/config"
+	"hostlier/internal/controledge"
 	"hostlier/internal/model"
 )
 
@@ -112,7 +113,9 @@ func hostServer(o Options, host, controller, upstream string, routes []Route) (s
 		artifactLocation := strings.Replace(location, "location ^~ / {", `location ~ "^/v1/artifacts/[a-f0-9]{64}/chunks$" { client_max_body_size 2m;`, 1)
 		// A normal prefix lets Nginx choose the exact chunk regex first.
 		location = strings.Replace(location, "location ^~ / {", "location / {", 1)
-		return text + gatewayForwardedScheme(artifactLocation+location, o.Gateway) + " }\n", nil
+		// The protobuf envelope adds a few bytes to the largest 2 MiB JSON request.
+		rpc := fmt.Sprintf(" location ^~ %s { client_max_body_size 3m; grpc_pass grpc://%s; grpc_set_header Host $host; grpc_read_timeout 600s; grpc_send_timeout 600s; }\n", controledge.RPCPrefix, upstream)
+		return text + rpc + gatewayForwardedScheme(artifactLocation+location, o.Gateway) + " }\n", nil
 	}
 	// Order specific routes before their parent locations.
 	sort.Slice(routes, func(i, j int) bool { return len(routes[i].Project.Route) > len(routes[j].Project.Route) })

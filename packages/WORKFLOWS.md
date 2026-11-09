@@ -28,7 +28,11 @@ Packages are trusted code running with controller privileges. Installation valid
 | `aiven` | — | Delegates to PostgreSQL/Redis engine workflows | Direct PostgreSQL/Valkey API adapter; cloud E2E pending |
 | `railway` | — | Delegates to PostgreSQL/Redis engine workflows | Unavailable in the direct adapter pending verified template capabilities |
 
+For PostgreSQL `new-database`, `config.database` may be omitted on a retained step without `phase`. The package then derives a portable `hl_` name from the controller's stable workflow key, which includes the controller namespace, application, and step identity. The same key resolves to the same database through redeploy and recovery; different applications resolve to different names. Set an explicit `config.database` when database identity must remain independent of the application name. The package validates explicit names as a lowercase letter followed by up to 47 lowercase letters, digits, or underscores.
+
 Redis numbered databases are not application isolation. Existing Redis uses a scoped ACL and returns `keyPrefix`; applications must use it. PostgreSQL role privileges are scoped, but an existing server's unrelated grants to `PUBLIC` remain the administrator's responsibility. Existing connections require TLS certificate verification (`sslmode=verify-full` for PostgreSQL, `rediss://` for Redis). An optional `caCertificatePEM` secret/input extends trust. The scoped result returns that CA for application trust configuration; bind it only when the app understands how to use PEM content.
+
+PostgreSQL connection URLs may require SCRAM channel binding with `channel_binding=require`; the package preserves it in the scoped application URL. `disable`, `prefer`, duplicate channel-binding values, and other connection overrides are rejected.
 
 ## Local database workflow
 

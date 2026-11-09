@@ -119,11 +119,8 @@ func (c *Client) setSecret(ctx context.Context, app, name string, value []byte) 
 	if c.server != "" {
 		args = append(args, "--server", c.server)
 	}
-	if _, err := runner.RunInput(ctx, args, c.bundleDirectory, value); err != nil {
-		// Never propagate a runner's output, which could include a sensitive value.
-		return errors.New("Hostlier secret write failed; inspect controller status")
-	}
-	return nil
+	_, err := runner.RunInput(ctx, args, c.bundleDirectory, value)
+	return err
 }
 
 // DeleteSecret removes a stored secret after Hostlier confirms it is unused.

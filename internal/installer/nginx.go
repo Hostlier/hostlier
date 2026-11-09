@@ -130,6 +130,9 @@ func (a *installationRunner) nginxReadiness() error {
 			return fmt.Errorf("owned Nginx controller route is absent; inspect configuration drift")
 		}
 		// Stop activation when the required local operation fails.
+		if err = edge.UpgradeController(a.ctx, nginxOptions(), a.plan.ControllerHostname, "127.0.0.1:7463"); err != nil {
+			return err
+		}
 		if err = edge.Check(a.ctx, nginxOptions()); err != nil {
 			return err
 		}

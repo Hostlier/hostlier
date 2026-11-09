@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package hostlier.control.v1;
+option go_package = "hostlier/internal/controlrpc";
+
+// Commands use the same versioned routes, exact signed JSON bytes, and
+// application error codes as the SDK. No HTTP request is proxied on the wire.
+service Controller {
+  rpc Command(CommandRequest) returns (CommandReply);
+  // After a disconnect, resume from the last log acknowledged by the caller.
+  rpc WatchOperation(EventRequest) returns (stream Event);
+  rpc WatchJob(JobRequest) returns (stream Event);
+  rpc WatchStatus(StatusRequest) returns (stream Event);
+}
+
+message CommandRequest {
+  string method = 1;
+  string route = 2;
+  bytes json_body = 3;
+}
+message CommandReply { bytes json_body = 1; }
+message EventRequest {
+  string operation_id = 1;
+  string cursor = 2;
+  string host = 3;
+}
+message Event {
+  string kind = 1;
+  string cursor = 2;
+  bytes json_data = 3;
+}
+message StatusRequest {}
+// Only planning, approvals, and recovery jobs have watchable receipt routes.
+message JobRequest { string route = 1; string host = 2; }
+message ControllerError { string code = 1; }

@@ -65,7 +65,7 @@ func newRecoveryCLI(t *testing.T) (Options, *recoveryPackageFixture) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { server.Close(context.Background()) }) // Close only this fixture's temporary controller.
-	api := workflowAPI{handler: withFixtureHuman(t, server, server.LocalHandler())}
+	api := newWorkflowAPI(t, withFixtureHuman(t, server, server.LocalHandler()))
 	// Store the original credential revision through the real protected secret API.
 	if err = api.Request(context.Background(), "PUT", "/v1/secrets/fused-token", map[string]any{"value": "private-fused-token", "requestId": "recovery-secret"}, nil); err != nil {
 		t.Fatal(err)

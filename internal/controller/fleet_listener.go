@@ -46,7 +46,7 @@ func (c *Controller) remoteListenerHandler(o ListenOptions) http.Handler {
 // serveHostAgent rejects bearer-only access and removes trust-administration routes from delegation.
 func (c *Controller) serveHostAgent(w http.ResponseWriter, r *http.Request, pin string) {
 	// Apply this check before granting authority or advancing protocol state.
-	if r.TLS == nil || len(r.TLS.PeerCertificates) == 0 || !model.FleetRoute(r.URL.Path) {
+	if r.TLS == nil || len(r.TLS.PeerCertificates) == 0 || (!model.FleetRoute(r.URL.Path) && !agentWatch(r.URL.Path)) {
 		http.Error(w, "Host delegation denied", http.StatusForbidden)
 		return
 	}
@@ -60,7 +60,7 @@ func (c *Controller) serveHostAgent(w http.ResponseWriter, r *http.Request, pin 
 	authority := hostAuthority{Actor: "controller:" + actor}
 	authority.Peer, _ = r.Context().Value(masterPeerKey{}).(*masterPeer)
 	// Apply this check before granting authority or advancing protocol state.
-	if model.RequiresHumanApproval(r.Method, r.URL.Path) {
+	if !agentWatch(r.URL.Path) && model.RequiresHumanApproval(r.Method, r.URL.Path) {
 		generation, err := strconv.ParseInt(r.Header.Get("X-Hostlier-Generation"), 10, 64)
 		// Propagate failure rather than continuing with incomplete or unverified state.
 		if err != nil || generation < 0 {
@@ -70,6 +70,10 @@ func (c *Controller) serveHostAgent(w http.ResponseWriter, r *http.Request, pin 
 		authority.Generation = &generation
 	}
 	ctx := context.WithValue(r.Context(), fleetContext{}, authority)
+	if agentWatch(r.URL.Path) {
+		c.managementHandler(true).ServeHTTP(w, r.WithContext(ctx))
+		return
+	}
 	c.handle(w, r.WithContext(ctx), true)
 }
 

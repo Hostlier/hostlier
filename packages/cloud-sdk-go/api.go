@@ -12,7 +12,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -91,6 +90,9 @@ func newAPIRunner(credentialFile string) (*apiRunner, error) {
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.Proxy = nil
+	transport.Protocols = new(http.Protocols)
+	transport.Protocols.SetHTTP2(true)
+	transport.HTTP2 = &http.HTTP2Config{SendPingTimeout: 30 * time.Second, PingTimeout: 10 * time.Second}
 	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
 	return &apiRunner{origin: u.String(), token: device.Token, key: ed25519.PrivateKey(key), http: &http.Client{Transport: transport, Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}, nil
 }
@@ -289,9 +291,6 @@ func (a *apiRunner) reviewedPlan(ctx context.Context, body map[string]any, workf
 	}
 	for {
 		err := a.request(ctx, "POST", "/v1/planning", request, &planning)
-		if failure, ok := err.(*apiFailure); ok && failure.Code == "NOT_FOUND" {
-			return plan, a.request(ctx, "POST", "/v1/plans", body, &plan)
-		}
 		if failure, ok := err.(*apiFailure); ok && failure.Code == "CONNECTION" {
 			if err := sdkPause(ctx); err != nil {
 				return plan, err
@@ -307,26 +306,16 @@ func (a *apiRunner) reviewedPlan(ctx context.Context, body map[string]any, workf
 		return plan, errors.New("controller returned no planning receipt")
 	}
 	id := planning.ID
-	for planning.Status != "completed" {
-		if planning.Error != nil {
-			return plan, &apiFailure{Code: planning.Error.Code, Message: planning.Error.Message}
-		}
-		if planning.Status != "queued" && planning.Status != "running" {
-			return plan, errors.New("controller planning requires recovery")
-		}
-		if err := sdkPause(ctx); err != nil {
+	if planning.Status == "queued" || planning.Status == "running" {
+		if err := a.await(ctx, "receipt", id, "/v1/planning/"+url.PathEscape(id), &planning); err != nil {
 			return plan, err
 		}
-		err := a.request(ctx, "GET", "/v1/planning/"+url.PathEscape(id), nil, &planning)
-		if failure, ok := err.(*apiFailure); ok && failure.Code == "CONNECTION" {
-			continue
-		}
-		if err != nil {
-			return plan, err
-		}
-		if planning.ID != id {
-			return plan, errors.New("controller returned a different planning job")
-		}
+	}
+	if planning.Error != nil {
+		return plan, &apiFailure{Code: planning.Error.Code, Message: planning.Error.Message}
+	}
+	if planning.Status != "completed" {
+		return plan, errors.New("controller planning requires recovery")
 	}
 	return planning.Plan, nil
 }
@@ -351,31 +340,23 @@ func (a *apiRunner) approveAndWait(ctx context.Context, method, path string, bod
 	if json.Unmarshal([]byte(receipt.Stdout), &accepted) != nil || accepted.OperationID == "" {
 		return receipt, errors.New("controller returned no operation receipt")
 	}
-	for {
-		var operation struct {
-			Status string                          `json:"status"`
-			Error  *struct{ Code, Message string } `json:"error"`
+	var operation struct {
+		Status string
+		Error  *struct{ Code, Message string }
+	}
+	if err := a.await(ctx, "operation", accepted.OperationID, operationRoute(accepted.OperationID), &operation); err != nil {
+		return receipt, err
+	}
+	switch operation.Status {
+	case "succeeded":
+		return receipt, nil
+	case "failed", "cancelled", "interrupted", "needs_attention", "superseded":
+		if operation.Error != nil && operation.Error.Code != "" {
+			return receipt, &apiFailure{Code: operation.Error.Code, Message: operation.Error.Message}
 		}
-		if err := a.request(ctx, "GET", "/v1/operations/"+url.PathEscape(accepted.OperationID), nil, &operation); err != nil {
-			return receipt, err
-		}
-		switch operation.Status {
-		case "succeeded":
-			return receipt, nil
-		case "failed", "cancelled", "interrupted", "needs_attention", "superseded":
-			if operation.Error != nil && operation.Error.Code != "" {
-				return receipt, &apiFailure{Code: operation.Error.Code, Message: operation.Error.Message}
-			}
-			return receipt, fmt.Errorf("Hostlier operation %s", operation.Status)
-		case "queued", "running":
-		default:
-			return receipt, errors.New("controller returned an unknown operation status")
-		}
-		select {
-		case <-ctx.Done():
-			return receipt, ctx.Err()
-		case <-time.After(time.Second):
-		}
+		return receipt, fmt.Errorf("Hostlier operation %s", operation.Status)
+	default:
+		return receipt, errors.New("controller returned an unknown operation status")
 	}
 }
 
@@ -391,13 +372,8 @@ func (a *apiRunner) approve(ctx context.Context, method, path string, body any) 
 	if approval.ID == "" {
 		return Result{}, errors.New("controller returned no approval receipt")
 	}
-	for approval.Status == "pending" && time.Now().UnixMilli() < approval.ExpiresAt {
-		select {
-		case <-ctx.Done():
-			return Result{}, ctx.Err()
-		case <-time.After(time.Second):
-		}
-		if err := a.request(ctx, "GET", "/v1/approvals/"+url.PathEscape(approval.ID), nil, &approval); err != nil {
+	if approval.Status == "pending" {
+		if err := a.await(ctx, "receipt", approval.ID, "/v1/approvals/"+url.PathEscape(approval.ID), &approval); err != nil {
 			return Result{}, err
 		}
 	}
@@ -450,33 +426,7 @@ func (a *apiRunner) request(ctx context.Context, method, path string, body any, 
 	if err := a.sign(req, data); err != nil {
 		return err
 	}
-	response, err := a.http.Do(req)
-	if err != nil {
-		return &apiFailure{Code: "CONNECTION", Message: "Cannot reach controller: " + err.Error(), Cause: err}
-	}
-	defer response.Body.Close()
-	raw, err := io.ReadAll(io.LimitReader(response.Body, 4*maxDocument+1))
-	if err != nil {
-		return fmt.Errorf("read controller response: %w", err)
-	}
-	if len(raw) > 4*maxDocument {
-		return errors.New("controller response too large")
-	}
-	if response.StatusCode >= 300 {
-		var envelope struct {
-			Error struct{ Code, Message string } `json:"error"`
-		}
-		if json.Unmarshal(raw, &envelope) == nil && envelope.Error.Code != "" {
-			return &apiFailure{Code: envelope.Error.Code, Message: envelope.Error.Message}
-		}
-		return &apiFailure{Code: "CONTROLLER", Message: fmt.Sprintf("Controller request failed (%d)", response.StatusCode)}
-	}
-	if output != nil {
-		if err := json.Unmarshal(raw, output); err != nil {
-			return fmt.Errorf("decode controller response: %w", err)
-		}
-	}
-	return nil
+	return a.command(ctx, req, data, output)
 }
 
 func (a *apiRunner) sign(request *http.Request, body []byte) error {
@@ -484,15 +434,13 @@ func (a *apiRunner) sign(request *http.Request, body []byte) error {
 	if err != nil {
 		return err
 	}
-	epochResponse, err := a.http.Do(epochRequest)
-	if err != nil {
-		return &apiFailure{Code: "CONNECTION", Message: "Cannot obtain controller device session: " + err.Error(), Cause: err}
-	}
-	defer epochResponse.Body.Close()
 	var session struct {
 		Epoch string `json:"epoch"`
 	}
-	if epochResponse.StatusCode != 200 || json.NewDecoder(io.LimitReader(epochResponse.Body, 4096)).Decode(&session) != nil || len(session.Epoch) != 64 {
+	if err := a.command(request.Context(), epochRequest, nil, &session); err != nil {
+		return err
+	}
+	if len(session.Epoch) != 64 {
 		return errors.New("controller returned no valid device session")
 	}
 	timestamp := strconv.FormatInt(time.Now().Unix(), 10)

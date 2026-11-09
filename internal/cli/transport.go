@@ -36,7 +36,7 @@ func (s *session) connectRemote() error {
 		}
 	}
 	if s.remote == nil {
-		c, e := client.New(settings)
+		c, e := client.NewGRPC(settings)
 		// Require a verified controller transport before sending credentials or commands.
 		if e != nil {
 			return e

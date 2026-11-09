@@ -24,7 +24,7 @@ func (s *session) joinMaster() error {
 			return model.Err("ARGUMENTS", "Unsupported join option --"+flag)
 		}
 	}
-	local, err := client.New(client.Options{SocketPath: "/run/hostlier/controller.sock"})
+	local, err := client.NewGRPC(client.Options{SocketPath: "/run/hostlier/controller.sock"})
 	if err != nil {
 		return err
 	}
@@ -132,6 +132,6 @@ func (s *session) joinConnection(name string) error {
 	if err != nil {
 		return err
 	}
-	s.remote, err = client.New(client.Options{URL: origin, Token: credential.Token})
+	s.remote, err = client.NewGRPC(client.Options{URL: origin, Token: credential.Token})
 	return err
 }

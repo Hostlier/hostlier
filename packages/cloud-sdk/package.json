@@ -3,11 +3,29 @@
   "version": "0.1.0",
   "description": "Manage customer Hostlier applications from a bundled .hostlier template",
   "type": "module",
-  "engines": { "node": ">=24" },
-  "exports": {
-    ".": { "types": "./index.d.ts", "import": "./index.js" }
+  "engines": {
+    "node": ">=24"
   },
-  "files": ["index.js", "controller.js", "index.d.ts", "README.md"],
-  "scripts": { "test": "node --test test/*.test.js" },
-  "dependencies": { "yaml": "2.9.1" }
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.js"
+    }
+  },
+  "files": [
+    "index.js",
+    "controller.js",
+    "index.d.ts",
+    "README.md",
+    "grpc.js",
+    "controller.proto"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "@grpc/grpc-js": "1.14.6",
+    "@grpc/proto-loader": "0.8.1",
+    "yaml": "2.9.1"
+  }
 }

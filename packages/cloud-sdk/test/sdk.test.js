@@ -42,6 +42,18 @@ sidecars:
       WORKER_KEY: secret://template-worker-key
 `;
 
+const postgresBundle = `${bundle}workflow:
+  steps:
+    - id: database
+      package: postgres
+      config:
+        mode: new-database
+      secrets:
+        connection: postgres-admin
+  bindings:
+    DATABASE_URL: database.url
+`;
+
 async function fixture(source = bundle) {
   const root = await mkdtemp(join(tmpdir(), 'hostlier-cloud-sdk-'));
   const bundlePath = join(root, 'vendor.hostlier');
@@ -82,6 +94,115 @@ test('customer creation and later changes retain the complete bundled project', 
   assert.equal(deployedUpdate.sidecars.worker.source.image, 'ghcr.io/acme/worker:1.0.0');
   assert.deepEqual(deployedUpdate.resources, { cpu: '0.5', memory: '512Mi' });
   assert.deepEqual(deployedUpdate.env, { NODE_ENV: 'production', CUSTOMER_ID: 'acme', FEATURE_ENABLED: 'true' });
+});
+
+test('create overrides only the declared PostgreSQL database and preserves it on update', async () => {
+  const f = await fixture(postgresBundle);
+  const desired = { name: 'acme-app', route: 'acme.apps.example.com', databaseName: 'workspace_acme' };
+  await f.sdk.create(desired);
+  const deployed = f.calls.find(call => call.args[0] === 'deploy').project;
+  assert.equal(deployed.workflow.steps[0].config.database, 'workspace_acme');
+  assert.equal(deployed.workflow.steps[0].config.mode, 'new-database');
+  assert.equal(deployed.workflow.steps[0].package, 'postgres');
+  assert.equal(deployed.workflow.steps[0].secrets.connection, 'postgres-admin');
+  const saved = YAML.parse(await readFile(join(f.options.stateDirectory, 'acme-app', '.hostlier'), 'utf8'));
+  assert.equal(saved.workflow.steps[0].config.database, 'workspace_acme');
+  await f.sdk.ensure(desired);
+  assert.equal(f.calls.filter(call => call.args[0] === 'deploy').length, 1);
+  await f.sdk.setEnvironment('acme-app', { FEATURE_ENABLED: 'true' });
+  assert.equal(f.calls.find(call => call.args[0] === 'update').project.workflow.steps[0].config.database, 'workspace_acme');
+  await assert.rejects(f.sdk.ensure(desired), /differs from the retained create intent/);
+  await f.sdk.create({ name: 'beta-app', route: 'beta.apps.example.com', databaseName: 'workspace_beta' });
+  assert.equal(f.calls.filter(call => call.args[0] === 'deploy')[1].project.workflow.steps[0].config.database, 'workspace_beta');
+});
+
+test('omitting databaseName leaves the template ready for package-derived naming', async () => {
+  const f = await fixture(postgresBundle);
+  await f.sdk.create({ name: 'acme-app', route: 'acme.apps.example.com' });
+  const step = f.calls.find(call => call.args[0] === 'deploy').project.workflow.steps[0];
+  assert.deepEqual(step.config, { mode: 'new-database' });
+  const saved = YAML.parse(await readFile(join(f.options.stateDirectory, 'acme-app', '.hostlier'), 'utf8'));
+  assert.deepEqual(saved.workflow.steps[0].config, { mode: 'new-database' });
+});
+
+test('databaseName rejects unsafe names and templates without the declared PostgreSQL step', async () => {
+  const f = await fixture(postgresBundle);
+  for (const databaseName of ['', 'bad-name', 'Uppercase', '1starts_with_digit', 'a'.repeat(49), 4]) {
+    await assert.rejects(f.sdk.create({ name: 'acme-app', route: 'acme.apps.example.com', databaseName }), /Invalid PostgreSQL database name/);
+  }
+  assert.equal(f.calls.length, 0);
+  for (const source of [bundle, postgresBundle.replace('package: postgres', 'package: redis'), postgresBundle.replace('mode: new-database', 'mode: new-instance')]) {
+    const other = await fixture(source);
+    await assert.rejects(other.sdk.create({ name: 'acme-app', route: 'acme.apps.example.com', databaseName: 'workspace_acme' }), /does not declare a PostgreSQL/);
+    assert.equal(other.calls.length, 0);
+  }
+});
+
+test('an interrupted PostgreSQL create retains the resolved database for recovery', async () => {
+  const f = await fixture(postgresBundle);
+  const desired = { name: 'acme-app', route: 'acme.apps.example.com', databaseName: 'workspace_acme' };
+  const run = f.options.run;
+  f.options.run = async (args, options) => {
+    const result = await run(args, options);
+    if (args[0] === 'deploy') throw new Error('connection interrupted after acceptance');
+    return result;
+  };
+  const sdk = await createHostlierCloud(f.options);
+  await assert.rejects(sdk.create(desired), /connection interrupted/);
+  const pending = JSON.parse(await readFile(join(f.options.stateDirectory, 'acme-app', 'pending.json'), 'utf8'));
+  assert.equal(pending.project.workflow.steps[0].config.database, 'workspace_acme');
+  f.setReady(true);
+  await sdk.recoverPending('acme-app', 'ghcr.io/acme/tool@sha256:' + 'a'.repeat(64));
+  await sdk.ensure(desired);
+  const saved = YAML.parse(await readFile(join(f.options.stateDirectory, 'acme-app', '.hostlier'), 'utf8'));
+  assert.equal(saved.workflow.steps[0].config.database, 'workspace_acme');
+});
+
+test('ensure creates once and observes only the same complete project', async () => {
+  const f = await fixture(postgresBundle);
+  const desired = { name: 'acme-app', route: 'acme.apps.example.com', databaseName: 'workspace_acme', env: { CUSTOMER_ID: 'acme', REGION: 'uk' } };
+  const initial = await f.sdk.ensure(desired);
+  assert.equal(initial.ready, false);
+  f.setReady(true);
+  const repeated = await f.sdk.ensure({ ...desired, env: { REGION: 'uk', CUSTOMER_ID: 'acme' } });
+  assert.equal(repeated.ready, true);
+  assert.equal(f.calls.filter(call => call.args[0] === 'deploy').length, 1);
+  assert.equal(f.calls.filter(call => call.args[0] === 'validate').length, 1);
+  for (const changed of [
+    { ...desired, route: 'other.apps.example.com' },
+    { ...desired, databaseName: 'workspace_other' },
+    { ...desired, env: { CUSTOMER_ID: 'other' } },
+  ]) {
+    await assert.rejects(f.sdk.ensure(changed), /differs from the retained create intent/);
+  }
+  assert.equal(f.calls.filter(call => call.args[0] === 'deploy').length, 1);
+});
+
+test('ensure refuses uncertain creation and out-of-band changes', async () => {
+  const f = await fixture(postgresBundle);
+  const desired = { name: 'acme-app', route: 'acme.apps.example.com', databaseName: 'workspace_acme' };
+  const run = f.options.run;
+  f.options.run = async (args, options) => {
+    const result = await run(args, options);
+    if (args[0] === 'deploy') throw new Error('connection interrupted after acceptance');
+    return result;
+  };
+  const sdk = await createHostlierCloud(f.options);
+  await assert.rejects(sdk.ensure(desired), /connection interrupted/);
+  await assert.rejects(sdk.ensure(desired), /uncertain result/);
+  f.setReady(true);
+  await sdk.recoverPending('acme-app', 'ghcr.io/acme/tool@sha256:' + 'a'.repeat(64));
+  const originalRun = f.options.run;
+  f.options.run = async (args, options) => {
+    const result = await originalRun(args, options);
+    if (args[0] !== 'status' || args[1] === '--json') return result;
+    const status = JSON.parse(result.stdout);
+    status.spec.env.NODE_ENV = 'changed-outside-sdk';
+    return { ...result, stdout: JSON.stringify(status) };
+  };
+  const changed = await createHostlierCloud(f.options);
+  await assert.rejects(changed.ensure(desired), /changed outside this SDK/);
+  assert.equal(f.calls.filter(call => call.args[0] === 'deploy').length, 1);
 });
 
 test('a new bundle cannot silently alter an existing instance', async () => {

@@ -314,7 +314,7 @@ func (m *ManagedRemote) PollLink(ctx context.Context) (ConnectionState, error) {
 }
 
 // newControllerClient applies the normal verified HTTPS and device-signing transport to the dashboard.
-func newControllerClient(options client.Options) (Remote, error) { return client.New(options) }
+func newControllerClient(options client.Options) (Remote, error) { return client.NewGRPC(options) }
 
 // validateLink rejects invalid names, insecure origins and conflicting pending enrollment before network I/O.
 func (m *ManagedRemote) validateLink(name, address string) (string, error) {

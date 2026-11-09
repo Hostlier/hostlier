@@ -14,6 +14,7 @@ type Options struct {
 
 // Client owns verified HTTP transport and its server-scoped bearer credential.
 type Client struct {
+	grpc               bool
 	deviceKey          ed25519.PrivateKey
 	HTTP               *http.Client
 	URL, Token, Target string

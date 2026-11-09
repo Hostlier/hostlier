@@ -51,7 +51,10 @@ func ensureEdge(ctx context.Context, p Plan, initial string) error {
 			return e
 		}
 	}
-	return verifyActivatedEdge(p, raw)
+	if err := verifyActivatedEdge(p, raw); err != nil {
+		return err
+	}
+	return upgradeCaddyRPC(ctx, client, "http://127.0.0.1:2019/id/hostlier-controller", p)
 }
 
 // fetchEdge talks only to private Caddy administration with bounded responses.

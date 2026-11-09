@@ -22,6 +22,7 @@ type eventSnapshot struct {
 	after    uint64
 	status   string
 	terminal bool
+	changed  <-chan struct{}
 }
 
 // migrateEventSequences assigns durable cursors to legacy events without changing their order.
@@ -72,7 +73,10 @@ func operationTerminal(status string) bool {
 func (c *Controller) snapshotEvents(r *http.Request, local bool, id string, after uint64, status string) (eventSnapshot, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	result := eventSnapshot{after: after}
+	if c.operationChange == nil {
+		c.operationChange = make(chan struct{})
+	}
+	result := eventSnapshot{after: after, changed: c.operationChange}
 	// Revocation or controller shutdown closes a live stream without touching its background job.
 	if _, err := c.authenticate(r, local, false); err != nil {
 		return result, err
@@ -124,4 +128,14 @@ func (c *Controller) retainedEventFrames(id string, after uint64) ([]eventFrame,
 		}
 	}
 	return frames, after
+}
+
+// signalOperationChange wakes subscribed streams without waiting for readers.
+// Call while holding the state lock; the snapshot captures its next wakeup
+// under the same lock, so a change racing delivery cannot be missed.
+func (c *Controller) signalOperationChange() {
+	if c.operationChange != nil {
+		close(c.operationChange)
+		c.operationChange = nil
+	}
 }

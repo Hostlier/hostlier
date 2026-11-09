@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -52,10 +53,10 @@ func TestBundledCloudSDKInstallRejectsConflicts(t *testing.T) {
 	}
 }
 
-// TestBundledCloudGoSDKInstall copies the Go wrapper and declares only its YAML parser dependency.
+// TestBundledCloudGoSDKInstall copies the Go wrapper and builds the installed sources without fetching dependencies.
 func TestBundledCloudGoSDKInstall(t *testing.T) {
 	project := t.TempDir()
-	if err := os.WriteFile(filepath.Join(project, "go.mod"), []byte("module example.com/backend\n\ngo 1.26.0\n"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(project, "go.mod"), []byte("module example.com/backend\n\ngo 1.26.0\n\nrequire connectrpc.com/connect v1.12.0\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
 	for i := 0; i < 2; i++ {
@@ -76,6 +77,13 @@ func TestBundledCloudGoSDKInstall(t *testing.T) {
 	if sums, err := os.ReadFile(filepath.Join(project, "go.sum")); err != nil || !strings.Contains(string(sums), "gopkg.in/yaml.v3 v3.0.1 h1:") {
 		t.Fatal("Go YAML dependency was not pinned", err)
 	}
+	cmd := exec.Command("go", "build", "-mod=readonly", "./hostliercloud/...")
+	cmd.Dir = project
+	cmd.Env = append(os.Environ(), "GOPROXY=off", "GOWORK=off")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("installed SDK did not build: %v: %s", err, output)
+	}
+
 }
 
 // TestBundledCloudGoSDKRejectsUnownedPackage avoids overwriting the caller's own Go code.

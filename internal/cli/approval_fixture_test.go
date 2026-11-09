@@ -2,6 +2,8 @@ package cli
 
 import (
 	"bytes"
+	"connectrpc.com/connect"
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -9,6 +11,8 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"encoding/pem"
+	pb "hostlier/internal/controlrpc"
+	"hostlier/internal/controlrpc/controlrpcconnect"
 	"io"
 	"math/big"
 	"net/http"
@@ -154,4 +158,40 @@ func (s *approvalSimulation) respond(method, path string, body, result any) (boo
 		return false, s.pending, nil
 	}
 	return false, call{method, path, body}, nil
+}
+
+// The PTY test's independent signer watches proposal receipts at a test-only
+// gRPC proxy. Both hops use the real protocol; all authorization, enrollment
+// and streaming run against the unmodified controller.
+func withFixtureGRPCHuman(t *testing.T, c *controller.Controller) http.Handler {
+	t.Helper()
+	handler := c.Handler()
+	signer := withFixtureHuman(t, c, handler).(*fixtureHuman)
+	upstream := httptest.NewUnstartedServer(handler)
+	upstream.EnableHTTP2 = true
+	upstream.StartTLS()
+	t.Cleanup(upstream.Close)
+	api := controlrpcconnect.NewControllerClient(upstream.Client(), upstream.URL, connect.WithGRPC())
+	proxy := connect.NewUnaryHandler(controlrpcconnect.ControllerCommandProcedure, func(ctx context.Context, in *connect.Request[pb.CommandRequest]) (*connect.Response[pb.CommandReply], error) {
+		call := connect.NewRequest(in.Msg)
+		call.Header().Set("Authorization", in.Header().Get("Authorization"))
+		result, err := api.Command(ctx, call)
+		if err == nil && in.Msg.Route == "/v1/approvals" && in.Msg.Method == "POST" {
+			var approval map[string]any
+			if json.Unmarshal(result.Msg.JsonBody, &approval) == nil && approval["status"] == "pending" {
+				signer.mu.Lock()
+				signed := signer.decide(approval, in.Header())
+				signer.mu.Unlock()
+				result.Msg.JsonBody = signed.Body.Bytes()
+			}
+		}
+		return result, err
+	})
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == controlrpcconnect.ControllerCommandProcedure {
+			proxy.ServeHTTP(w, r)
+			return
+		}
+		handler.ServeHTTP(w, r)
+	})
 }

@@ -67,22 +67,23 @@ func (c *Controller) createBackup(r *http.Request, resource *ResourceRecord) (an
 	c.execMu.Lock()
 	c.mu.Lock()
 	op.Status = "running"
+	c.signalOperationChange()
 	err = c.store.Save(c.state)
 	c.mu.Unlock()
 	ctx, cancel := context.WithTimeout(c.ctx, c.opts.LongOperationTimeout)
-	stop := context.AfterFunc(r.Context(), cancel)
+	// The accepted backup belongs to the controller even if the caller disconnects.
 	var data []byte
 	// Invoke the resource manager only after running state was persisted.
 	if err == nil {
 		data, err = manager.Backup(ctx, resource.Name, model.ResourceContext{Credentials: credentials, OperationID: id})
 	}
-	stop()
 	cancel()
 	c.mu.Lock()
 	c.execMu.Unlock()
 	// The request handler's state lock is held again on every return path.
 	if err != nil {
 		op.Status = "failed"
+		c.signalOperationChange()
 		op.Error = &model.Error{Code: "BACKUP_FAILED", Message: "Resource backup failed"}
 		c.store.Save(c.state)
 		return nil, op.Error
@@ -174,7 +175,7 @@ func (c *Controller) commitBackup(resource *ResourceRecord, op *Operation, data 
 	op.Status = "failed"
 	op.Error = &model.Error{Code: "BACKUP_FAILED", Message: "Backup could not be durably committed"}
 	// Persist the final backup operation status on every exit path.
-	defer func() { c.store.Save(c.state) }()
+	defer func() { c.store.Save(c.state); c.signalOperationChange() }()
 	// Reject this path: Backup must contain 1 byte to 256 MiB.
 	if len(data) == 0 || len(data) > 256*1024*1024 {
 		return nil, model.Err("BACKUP_SIZE", "Backup must contain 1 byte to 256 MiB")

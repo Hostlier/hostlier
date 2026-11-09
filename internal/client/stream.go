@@ -16,12 +16,20 @@ import (
 	"hostlier/internal/model"
 )
 
-// WatchOperation resumes bounded SSE connections until a terminal snapshot is consumed or observation is cancelled.
+// WatchOperation resumes interrupted streams until a terminal snapshot is consumed or observation is cancelled.
 func (c *Client) WatchOperation(ctx context.Context, operationID, cursor string, consume func(OperationEvent) error) error {
+	return c.WatchOperationOn(ctx, "", operationID, cursor, consume)
+}
+
+// WatchOperationOn streams a local or explicitly delegated operation.
+func (c *Client) WatchOperationOn(ctx context.Context, host, operationID, cursor string, consume func(OperationEvent) error) error {
 	watch, err := c.operationWatcher(operationID, cursor, consume)
 	// Reject invalid resume state before entering the reconnect loop.
 	if err != nil {
 		return err
+	}
+	if host != "local" {
+		watch.host = host
 	}
 	delay := 100 * time.Millisecond
 	// Per-connection HTTP timeouts do not impose a wall-clock limit on durable server work.
@@ -54,6 +62,9 @@ func (c *Client) WatchOperation(ctx context.Context, operationID, cursor string,
 
 // connect opens one credential-scoped stream using the same verified transport as ordinary API requests.
 func (w *operationWatch) connect(ctx context.Context) error {
+	if w.client.grpc {
+		return w.connectRPC(ctx)
+	}
 	req, err := http.NewRequestWithContext(ctx, "GET", w.client.URL+"/v1/operations/"+url.PathEscape(w.operationID)+"/events", nil)
 	// Invalid local request configuration is permanent and must not enter a retry loop.
 	if err != nil {
@@ -77,29 +88,11 @@ func (w *operationWatch) connect(ctx context.Context) error {
 		return streamConnectionError(ctx, err)
 	}
 	defer response.Body.Close()
-	// Legacy fallback requires proving the operation exists independently of the absent endpoint.
-	if response.StatusCode == 404 || response.StatusCode == 405 {
-		return w.unsupported(ctx)
-	}
 	// Decode bounded API errors before interpreting a response as an SSE stream.
 	if response.StatusCode != 200 {
 		return operationHTTPError(response)
 	}
 	return w.readResponse(response)
-}
-
-// unsupported distinguishes an older controller endpoint from a genuinely unknown operation.
-func (w *operationWatch) unsupported(ctx context.Context) error {
-	var operation operationSnapshot
-	// Missing or unauthorized operations must retain their real semantic failure instead of entering polling fallback.
-	if err := w.client.Request(ctx, "GET", "/v1/operations/"+url.PathEscape(w.operationID), nil, &operation); err != nil {
-		return err
-	}
-	// Require a matching real operation before declaring the streaming capability absent.
-	if operation.ID != w.operationID {
-		return model.Err("EVENT_PROTOCOL", "Controller returned a different operation")
-	}
-	return ErrEventsUnsupported
 }
 
 // readResponse enforces an SSE media type and returns retryable EOF only for incomplete observation.
@@ -118,11 +111,7 @@ func streamConnectionError(ctx context.Context, err error) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	var certificate *tls.CertificateVerificationError
-	var authority x509.UnknownAuthorityError
-	var hostname x509.HostnameError
-	// Never reconnect indefinitely when the controller's verified certificate is invalid.
-	if errors.As(err, &certificate) || errors.As(err, &authority) || errors.As(err, &hostname) {
+	if invalidCertificate(err) {
 		return model.Err("CONNECTION", "Cannot verify controller HTTPS certificate")
 	}
 	var network net.Error
@@ -194,4 +183,11 @@ func streamObservationError(err error) error {
 		return nil
 	}
 	return err
+}
+
+func invalidCertificate(err error) bool {
+	var certificate *tls.CertificateVerificationError
+	var authority x509.UnknownAuthorityError
+	var hostname x509.HostnameError
+	return errors.As(err, &certificate) || errors.As(err, &authority) || errors.As(err, &hostname)
 }

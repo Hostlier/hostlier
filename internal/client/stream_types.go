@@ -1,15 +1,9 @@
 package client
 
-import (
-	"encoding/json"
-	"errors"
-)
+import "encoding/json"
 
 // MaxOperationFrameBytes bounds a complete streamed operation or log payload before JSON decoding.
 const MaxOperationFrameBytes = 4 * 1024 * 1024
-
-// ErrEventsUnsupported permits polling only after an existing operation's server lacks the events endpoint.
-var ErrEventsUnsupported = errors.New("controller does not support operation event streams")
 
 // OperationEvent contains one sanitized server event and its optional durable log cursor.
 type OperationEvent struct {
@@ -28,11 +22,11 @@ type operationFrame struct {
 
 // operationWatch keeps only the last successfully consumed log cursor across reconnects.
 type operationWatch struct {
-	client              *Client
-	operationID, cursor string
-	sequence            uint64
-	consume             func(OperationEvent) error
-	terminal            bool
+	client                    *Client
+	host, operationID, cursor string
+	sequence                  uint64
+	consume                   func(OperationEvent) error
+	terminal                  bool
 }
 
 // operationLog validates cursor identity without exposing or interpreting the sanitized message text.

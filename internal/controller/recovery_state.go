@@ -192,6 +192,7 @@ func (c *Controller) updateRecoveryPhase(id, phase string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	job := c.state.RecoveryJobs[id]
+	c.signalJobChange()
 	job.Phase = phase
 	return c.store.Save(c.state)
 }
@@ -207,6 +208,7 @@ func (c *Controller) startRecoveryJob(job *RecoveryJob) {
 		ctx, cancel := context.WithTimeout(c.ctx, 30*time.Minute)
 		defer cancel()
 		c.mu.Lock()
+		c.signalJobChange()
 		job.Status = "running"
 		err := c.store.Save(c.state)
 		copy := *job

@@ -121,6 +121,9 @@ func (a *installationRunner) nginxGatewayReadiness() error {
 			return err
 		}
 	}
+	if err := edge.UpgradeController(a.ctx, edge.Options{Gateway: true}, a.plan.ControllerHostname, "127.0.0.1:7463"); err != nil {
+		return err
+	}
 	return ensureEdge(a.ctx, a.plan, a.assets.Caddy)
 }
 

@@ -39,9 +39,8 @@ func inspectPostgres(ctx context.Context, req workflow.Request, c Config, p payl
 
 // verifyPostgresResult authenticates approved credentials and checks the full resulting SQL scope.
 func verifyPostgresResult(ctx context.Context, req workflow.Request, c Config, p payload, u *url.URL) (workflow.Inspection, error) {
-	u.User = url.UserPassword(p.Credentials.Username, p.Credentials.Password)
-	u.Path = "/" + c.Database
-	app, err := connectPostgres(ctx, u.String(), req)
+	appURL := scopedPostgresURL(u, c, p)
+	app, err := connectPostgres(ctx, appURL.String(), req)
 	// Exact generated credentials bind the deterministic role to the approved request.
 	if err != nil {
 		return uncertain(), nil
@@ -51,15 +50,13 @@ func verifyPostgresResult(ctx context.Context, req workflow.Request, c Config, p
 	if verifyPostgresScope(ctx, app) != nil {
 		return uncertain(), nil
 	}
-	var isolated bool
-	err = app.QueryRow(ctx, `SELECT NOT EXISTS (SELECT FROM pg_database d, aclexplode(COALESCE(d.datacl, acldefault('d', d.datdba))) a WHERE d.datname=current_database() AND a.grantee=0)`).Scan(&isolated)
 	// A crash before PUBLIC revocation must never report completion.
-	if err != nil || !isolated {
+	if verifyPostgresIsolation(ctx, app) != nil {
 		return uncertain(), nil
 	}
 	p.Credentials.Database = c.Database
 	state, _ := json.Marshal(p)
-	outputs := map[string]string{"url": u.String()}
+	outputs := map[string]string{"url": appURL.String()}
 	enrich(outputs, p.Credentials)
 	exportTrust(outputs, req)
 	return completed(workflow.Result{State: state, Outputs: outputs}), nil

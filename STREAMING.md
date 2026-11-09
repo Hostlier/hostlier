@@ -10,29 +10,19 @@ hostlier operation ID --watch
 
 Use `hostlier operation ID` for a status snapshot. Advanced replay accepts `--cursor ID:SEQUENCE`. Progress goes to stderr; receipts and final results go to stdout.
 
-## HTTP contract
+## Controller transport
 
-`GET /v1/operations/{id}/events` accepts `Accept: text/event-stream` and an optional `Last-Event-ID: {id}:{sequence}`. It uses the same bearer authentication or protected local Unix socket authority as the ordinary API. Credentials are rechecked while streaming; revocation closes an existing subscription.
+The CLI and backend Cloud SDKs use native gRPC over HTTP/2 on the profile’s existing HTTPS address. The CLI also speaks gRPC on the protected local Unix socket. Hostlier’s managed proxy routes `/hostlier.control.v1.Controller/*` to the controller over HTTP/2; a custom proxy must do the same and preserve gRPC trailers. Browser pages, local dashboard SSE, tunnels and HTTP integrations keep their existing routes.
 
-| SSE event | Data | Replay ID |
-| --- | --- | --- |
-| `log` | Sanitized execution log with timestamp, level, message, operation ID and sequence | `{operationId}:{sequence}` |
-| `operation` | Current operation snapshot; sent initially, on status changes and at completion | None |
-| `reset` | `{"reason":"history_expired"}` before available replay when a resume cursor predates retention | None |
+The [service definition](internal/controlrpc/controller.proto) separates commands from subscriptions. A command that starts durable work returns its receipt. `WatchOperation` sends retained logs and status changes; `WatchJob` sends the current planning, approval or recovery receipt and subsequent changes. `WatchStatus` sends complete replacement snapshots for the dashboard. The SDKs only call commands and the operation and job subscriptions needed for their lifecycle methods.
 
-Log sequences are durable and monotonically increasing across the controller's event history. Cursor scope is validated against the requested operation. Malformed, cross-operation and future cursors are rejected before stream headers are sent. Legacy stored events receive sequences during state migration without reordering their history.
+A lost connection reopens the subscription for the same ID. The CLI resumes from its last delivered log cursor; it never switches to polling or resubmits a deployment to obtain its result. Cancelling a subscription releases the observer and leaves accepted work running. A controller process failure still follows the normal interrupted-operation recovery rules.
 
-The controller retains the newest 1,000 execution events globally. Resumption does not provide an unlimited audit history: an expired cursor produces a reset notification, followed by retained events and the current operation state. A new subscription without a cursor receives retained history, which may also be incomplete for older jobs. The terminal operation snapshot remains the completion result.
+| Operation event | Payload |
+| --- | --- |
+| `log` | Sanitized execution log with cursor `{operationId}:{sequence}` |
+| `operation` | Current operation snapshot, including the terminal outcome |
+| `reset` | A cursor predates retained history; retained logs and current status follow |
+| `heartbeat` | Keeps idle subscribers connected and checks authority; no progress payload |
 
-Connections rotate after roughly 20 seconds, with comment heartbeats every five seconds. The client reconnects until a terminal result or local cancellation. Each write has a short deadline; the controller admits at most 32 simultaneous subscriptions. Network writes happen outside the controller state lock, and new replay cursors are saved before they are exposed. Frames are bounded on the client and acknowledged only after successful consumption.
-
-SSE does not remove network or proxy timeouts. Reconnection and durable server-side operations make progress observation independent of any one HTTP connection. Controller process failure still follows Hostlier's existing interrupted-operation recovery rules; SSE does not automatically replay uncertain provisioning actions.
-
-## Local verification
-
-Tests exercise authenticated streaming, stable replay across controller restart, retained-history resets, invalid cursors, revocation, cancellation, slow-reader capacity, persistence failure, parser limits and secret redaction. A CLI-level TLS test runs plain `deploy`, drops an event stream mid-frame, returns a temporary gateway error, and verifies automatic cursor resumption, one approval/apply, no duplicate logs and one terminal result. The cross-package HTTPS test deliberately ends the first stream after a log, verifies a cursor-bearing reconnect, and confirms that the accepted deployment completes exactly once. The installed ARM64 k3s gate also passes approved deployment and restart with default SSE observation, immediate HTTPS verification and Redis persistence. Explicit installed `operation ID --watch` replay produces one terminal stdout result and cursor-bearing stderr progress.
-
-```sh
-go test -race ./internal/client ./internal/cli ./internal/controller
-make check
-```
+The controller retains the newest 1,000 execution events globally. It validates cursor scope and sequence and checks credentials during a watch. Progress after a retention gap may be incomplete; the terminal snapshot remains authoritative.

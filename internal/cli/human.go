@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"os"
@@ -45,7 +46,7 @@ func (s *session) requestHumanApproval(method, path string, body, result any) er
 // awaitHumanApproval executes only the stored request after the server verifies a hardware-key signature.
 func (s *session) awaitHumanApproval(approval approvalStatus, result any) error {
 	path := "/v1/approvals/" + url.PathEscape(approval.ID)
-	// Polling never changes approval or substitutes a new request payload.
+	// Observation never changes approval or substitutes a new request payload.
 	for {
 		// Only verified approval or a completed idempotent receipt permits execution retrieval.
 		if approval.Status == "approved" || approval.Status == "completed" {
@@ -61,11 +62,7 @@ func (s *session) awaitHumanApproval(approval approvalStatus, result any) error 
 			return model.Err("APPROVAL_UNAVAILABLE", "Approval is "+approval.Status+" or expired; inspect it before submitting new work")
 		}
 		// Ctrl-C stops waiting; it neither approves nor executes pending work.
-		if err := s.pause(); err != nil {
-			return err
-		}
-		// The original API identity is required on every poll.
-		if err := s.remote.Request(s.ctx, "GET", path, nil, &approval); err != nil {
+		if err := s.watchReceipt("", path, func(data json.RawMessage) error { return json.Unmarshal(data, &approval) }); err != nil {
 			return err
 		}
 	}
@@ -83,8 +80,8 @@ func (s *session) approval() error {
 		return s.getPrint(path)
 	}
 	var status approvalStatus
-	// Resume with fresh server status rather than a cached client assertion.
-	if err := s.remote.Request(s.ctx, "GET", path, nil, &status); err != nil {
+	// The subscription starts with the current receipt, even if it is already final.
+	if err := s.watchReceipt("", path, func(data json.RawMessage) error { return json.Unmarshal(data, &status) }); err != nil {
 		return err
 	}
 	var result any

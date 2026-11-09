@@ -28,6 +28,8 @@ export interface CreateInstance {
   env?: Record<string, string>;
   secrets?: Record<string, string>;
   sidecarSecrets?: Record<string, Record<string, string>>;
+  /** Overrides only workflow.steps[id=database].config.database for PostgreSQL new-database mode. */
+  databaseName?: string;
   compute?: Compute;
   replicas?: number;
   signal?: AbortSignal;
@@ -43,6 +45,8 @@ export interface HostlierCloud {
   recoverPendingPurge(name: string, options?: { signal?: AbortSignal }): Promise<HostlierResult | void>;
   confirmPurge(name: string, operationId: string, options?: { signal?: AbortSignal }): Promise<void>;
   create(input: CreateInstance): Promise<HostlierResult>;
+  /** Creates once, then observes only if the requested complete project still matches. */
+  ensure(input: CreateInstance): Promise<ApplicationStatus>;
   setEnvironment(name: string, changes: Record<string, string>, options?: { signal?: AbortSignal }): Promise<HostlierResult>;
   setCompute(name: string, compute: Compute, options?: { signal?: AbortSignal }): Promise<HostlierResult>;
   expandSidecarVolume(name: string, sidecar: string, volume: string, size: string, options?: { signal?: AbortSignal }): Promise<HostlierResult>;

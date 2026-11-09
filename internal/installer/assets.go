@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"hostlier/internal/config"
+	"hostlier/internal/controledge"
 	"hostlier/internal/fleet"
 	"hostlier/internal/model"
 )
@@ -84,7 +85,11 @@ ReadWritePaths=/var/lib/caddy
 	if loginError != nil {
 		return Assets{}, loginError
 	}
-	caddy := map[string]any{"admin": map[string]any{"listen": "127.0.0.1:2019"}, "apps": map[string]any{"http": map[string]any{"servers": map[string]any{"hostlier": map[string]any{"listen": []string{":443"}, "routes": []any{map[string]any{"@id": "hostlier-controller", "match": []any{map[string]any{"host": []string{o.ControllerHostname}}}, "handle": []any{map[string]any{"handler": "reverse_proxy", "upstreams": []any{map[string]any{"dial": "127.0.0.1:7463"}}}}, "terminal": true}}}}}}}
+	ordinary, rpc := "127.0.0.1:7463", "127.0.0.1:7463"
+	if o.Proxy == "nginx-gateway" {
+		ordinary, rpc = "127.0.0.1:14443", "127.0.0.1:14444"
+	}
+	caddy := map[string]any{"admin": map[string]any{"listen": "127.0.0.1:2019"}, "apps": map[string]any{"http": map[string]any{"servers": map[string]any{"hostlier": map[string]any{"listen": []string{":443"}, "routes": []any{controledge.CaddyRoute(o.ControllerHostname, ordinary, rpc)}}}}}}
 	data, e := json.MarshalIndent(caddy, "", "  ")
 	a.Caddy = string(data)
 	// Bind controller startup to the approved cluster service for k3s plans.

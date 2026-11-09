@@ -3,17 +3,15 @@ package cli
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/url"
 
 	"hostlier/internal/client"
 	"hostlier/internal/model"
 )
 
-// operationWatcher is an optional capability so existing injected request-only clients retain polling compatibility.
+// operationWatcher subscribes to the specified controller or enrolled host.
 type operationWatcher interface {
-	// WatchOperation delivers acknowledged resumable progress until terminal completion or observation cancellation.
-	WatchOperation(context.Context, string, string, func(client.OperationEvent) error) error
+	WatchOperationOn(context.Context, string, string, string, func(client.OperationEvent) error) error
 }
 
 // operationObserver owns terminal outcome tracking and output boundaries for one watched operation.
@@ -57,19 +55,11 @@ func (s *session) waitForOperation(operationID string) error {
 		return nil
 	}
 	observer := &operationObserver{session: s, operationID: operationID}
-	// Use the production streaming capability without breaking existing request-only injected test clients.
-	if watcher, ok := s.remote.(operationWatcher); ok && s.flags["on"] == "" {
-		err := watcher.WatchOperation(s.ctx, operationID, s.flags["cursor"], observer.consume)
-		// Poll only when the client proved an existing operation is hosted by an older server without SSE.
-		if !errors.Is(err, client.ErrEventsUnsupported) {
-			return observer.result(err)
-		}
+	watcher, ok := s.remote.(operationWatcher)
+	if !ok {
+		return model.Err("EVENTS_UNSUPPORTED", "Controller does not support gRPC operation subscriptions")
 	}
-	// A requested cursor cannot be honored by a legacy polling transport or older server.
-	if s.flags["cursor"] != "" {
-		return model.Err("EVENTS_UNSUPPORTED", "Controller does not support resumable operation events")
-	}
-	return observer.result(observer.poll())
+	return observer.result(watcher.WatchOperationOn(s.ctx, s.flags["on"], operationID, s.flags["cursor"], observer.consume))
 }
 
 // consume prints sanitized log/reset progress to stderr and terminal operation JSON only to stdout.
@@ -124,28 +114,4 @@ func (o *operationObserver) result(err error) error {
 		return model.Err("EVENT_PROTOCOL", "Operation event stream ended before terminal status")
 	}
 	return o.failure
-}
-
-// poll provides unbounded context-cancellable observation for older servers and request-only injected clients.
-func (o *operationObserver) poll() error {
-	// Polling has no overall job deadline because server work remains durable independently of this invocation.
-	for {
-		var operation map[string]any
-		// API semantic failures remain visible and never cancel the accepted operation.
-		if err := o.session.request("GET", "/v1/operations/"+url.PathEscape(o.operationID), nil, &operation); err != nil {
-			return err
-		}
-		// Reuse exactly the same terminal-result encoding and failure semantics as the stream path.
-		if err := o.snapshot(operation); err != nil {
-			return err
-		}
-		// Terminal success and failure both end observation after their final JSON was written.
-		if o.terminal {
-			return nil
-		}
-		// Honor local cancellation between compatibility requests.
-		if err := o.session.pause(); err != nil {
-			return err
-		}
-	}
 }

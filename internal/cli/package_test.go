@@ -118,11 +118,13 @@ func TestPackagedGoCLIHTTPSAndPTYApproval(t *testing.T) {
 	if e = server.Listen(controller.ListenOptions{SocketPath: socket}); e != nil {
 		t.Fatal(e)
 	}
-	https := httptest.NewTLSServer(withFixtureHuman(t, server, server.Handler()))
+	https := httptest.NewUnstartedServer(withFixtureGRPCHuman(t, server))
+	https.EnableHTTP2 = true
+	https.StartTLS()
 	defer https.Close()
 	ca := filepath.Join(dir, "ca.pem")
 	os.WriteFile(ca, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: https.Certificate().Raw}), 0600)
-	local, e := client.New(client.Options{SocketPath: socket})
+	local, e := client.NewGRPC(client.Options{SocketPath: socket})
 	// Fail immediately if fixture setup or execution fails.
 	if e != nil {
 		t.Fatal(e)

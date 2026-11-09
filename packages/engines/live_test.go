@@ -34,6 +34,23 @@ func TestLivePostgresScopedAccess(t *testing.T) {
 	if err != nil { // Require successful completion before using the returned engine state.
 		t.Fatal(err)
 	}
+	admin, err := connectPostgres(ctx, connection, req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer admin.Close(ctx)
+	var serverVersion int
+	if err := admin.QueryRow(ctx, "SELECT current_setting('server_version_num')::int").Scan(&serverVersion); err != nil {
+		t.Fatal(err)
+	}
+	privilege := "MEMBER"
+	if serverVersion >= 160000 {
+		privilege = "SET"
+	}
+	var adminCanSetRole bool
+	if err := admin.QueryRow(ctx, "SELECT pg_has_role(current_user, $1, $2)", result.Result.Outputs["username"], privilege).Scan(&adminCanSetRole); err != nil || !adminCanSetRole {
+		t.Fatalf("admin cannot use the scoped database owner role: %v", err)
+	}
 	app, err := pgx.Connect(ctx, result.Result.Outputs["url"])
 	if err != nil { // Require successful completion before using the returned engine state.
 		t.Fatal(err)

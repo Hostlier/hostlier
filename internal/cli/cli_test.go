@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"hostlier/internal/client"
 	"io"
 	"os"
 	"path/filepath"
@@ -493,4 +495,30 @@ func assertResourcePlanDecision(t *testing.T, f *fakeClient, options Options, ar
 	if final.path != "/v1/plans/resource-plan/apply" || final.body.(map[string]any)["approved"] != true {
 		t.Fatal("resource did not use approved plan apply")
 	}
+}
+
+// Scripted request fixtures provide an explicit terminal stream for lifecycle tests.
+func (f *fakeClient) WatchOperationOn(ctx context.Context, host, id, cursor string, consume func(client.OperationEvent) error) error {
+	path := "/v1/operations/" + id
+	if host != "" && host != "local" {
+		path = "/v1/hosts/" + host + "/proxy/operations/" + id
+	}
+	for i := 0; i < 16; i++ {
+		var value json.RawMessage
+		if err := f.Request(ctx, "GET", path, nil, &value); err != nil {
+			return err
+		}
+		if err := consume(client.OperationEvent{Event: "operation", Data: value}); err != nil {
+			return err
+		}
+		var state struct{ Status string }
+		_ = json.Unmarshal(value, &state)
+		if client.OperationTerminal(state.Status) {
+			return nil
+		}
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+	}
+	return errors.New("scripted operation has no terminal snapshot")
 }

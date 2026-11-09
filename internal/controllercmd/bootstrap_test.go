@@ -4,13 +4,17 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"hostlier/internal/model"
 	"io"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"connectrpc.com/connect"
+	pb "hostlier/internal/controlrpc"
+	"hostlier/internal/controlrpc/controlrpcconnect"
+	"hostlier/internal/model"
 )
 
 // TestStandaloneBootstrapUsesOnlyControllerSocket exercises the packaged command without a server CLI.
@@ -29,17 +33,24 @@ func TestStandaloneBootstrapUsesOnlyControllerSocket(t *testing.T) {
 	}
 	seen := make(chan model.OwnerSetupRequest, 1)
 	// The fixture exposes only the running controller's protected bootstrap endpoint.
-	server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// No general remote API is required by this standalone subcommand.
-		if r.Method != "POST" || r.URL.Path != "/v1/access/setup" {
-			w.WriteHeader(404)
-			return
+	handler := connect.NewUnaryHandler(controlrpcconnect.ControllerCommandProcedure, func(_ context.Context, call *connect.Request[pb.CommandRequest]) (*connect.Response[pb.CommandReply], error) {
+		if call.Msg.Method != "POST" || call.Msg.Route != "/v1/access/setup" {
+			t.Errorf("unexpected bootstrap route %q", call.Msg.Route)
 		}
 		var input model.OwnerSetupRequest
-		_ = json.NewDecoder(r.Body).Decode(&input)
+		if err := json.Unmarshal(call.Msg.JsonBody, &input); err != nil {
+			return nil, err
+		}
 		seen <- input
-		_ = json.NewEncoder(w).Encode(model.OwnerSetupResult{Status: "ready"})
+		return connect.NewResponse(&pb.CommandReply{JsonBody: []byte(`{"status":"ready"}`)}), nil
+	})
+	server := &http.Server{Protocols: new(http.Protocols), Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Content-Type") != "application/grpc" || r.ProtoMajor != 2 {
+			t.Error("bootstrap did not use native gRPC")
+		}
+		handler.ServeHTTP(w, r)
 	})}
+	server.Protocols.SetUnencryptedHTTP2(true)
 	// Run only the isolated local protocol fixture.
 	go server.Serve(listener)
 	defer server.Close()

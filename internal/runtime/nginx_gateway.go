@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"fmt"
+	"hostlier/internal/controledge"
 	"hostlier/internal/model"
 	edge "hostlier/internal/nginx"
 	"net"
@@ -75,11 +76,13 @@ func (r *Runtime) nginxGatewayRoute(app appRecord) (map[string]any, error) {
 // controllerEdgeRoute keeps local controller administration behind the same gateway backend when selected.
 func (r *Runtime) controllerEdgeRoute() map[string]any {
 	upstream := r.options.ControllerUpstream
+	rpc := upstream
 	// In gateway mode Nginx also owns the controller's reverse proxy route.
 	if r.options.Proxy == "nginx-gateway" {
 		upstream = "127.0.0.1:14443"
+		rpc = "127.0.0.1:14444"
 	}
-	route := map[string]any{"@id": "hostlier-controller", "match": []any{map[string]any{"host": []string{r.options.Hostname}}}, "handle": []any{map[string]any{"handler": "reverse_proxy", "upstreams": []any{map[string]any{"dial": upstream}}}}, "terminal": true}
+	route := controledge.CaddyRoute(r.options.Hostname, upstream, rpc)
 	// Ordinary Caddy deployments do not introduce gateway metadata.
 	if r.options.Proxy == "nginx-gateway" {
 		gatewayProxyHeaders(route)
@@ -92,7 +95,7 @@ func gatewayProxyHeaders(value map[string]any) {
 	// Metadata comes from the original request, before Caddy converts CONNECT into HTTP/1 Upgrade.
 	if value["handler"] == "reverse_proxy" {
 		headers := object(object(value, "headers"), "request")
-		headers["set"] = map[string]any{"X-Hostlier-Gateway-Method": []string{"{http.request.method}"}, "X-Hostlier-Gateway-Protocol": []string{"{http.request.proto_name}"}, "X-Hostlier-Gateway-Scheme": []string{"{http.request.scheme}"}}
+		headers["set"] = controledge.GatewayHeaders()
 	}
 	// Generated routes have a bounded nesting depth and no request-defined configuration nodes.
 	for _, key := range []string{"handle", "routes"} {

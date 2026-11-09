@@ -64,3 +64,10 @@ endif
 .PHONY: e2e-k3s-idle
 e2e-k3s-idle:
 	python3 test/e2e/fleet/run.py --k3s-idle
+
+
+# Regenerate after editing the controller contract (requires protoc and both Go plugins).
+.PHONY: control-proto
+control-proto:
+	protoc --go_out=. --go_opt=module=hostlier --connect-go_out=. --connect-go_opt=module=hostlier internal/controlrpc/controller.proto
+	node scripts/build-cloud-sdk.mjs

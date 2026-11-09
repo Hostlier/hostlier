@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"hostlier/internal/model"
 	"net/url"
@@ -132,21 +133,19 @@ func (s *session) recoveryJob(id string) error {
 	if id == "" {
 		return model.Err("ARGUMENTS", "Recovery job ID required")
 	}
-	// Inspect each retained item before advancing recovery state.
-	for {
-		var result map[string]any
-		// Return command or controller errors before presenting recovery as successful.
-		if err := s.request("GET", "/v1/recovery-jobs/"+url.PathEscape(id), nil, &result); err != nil {
-			return err
-		}
-		// Advance only after the required recovery invariant holds.
-		if s.flags["watch"] == "" || (result["status"] != "running" && result["status"] != "queued") {
-			return s.print(result)
-		}
-		fmt.Fprintln(s.errOut, "Recovery phase:", result["phase"])
-		// Return command or controller errors before presenting recovery as successful.
-		if err := s.pause(); err != nil {
-			return err
-		}
+	path := "/v1/recovery-jobs/" + url.PathEscape(id)
+	if s.flags["watch"] == "" {
+		return s.getPrint(path)
 	}
+	return s.watchReceipt(s.flags["on"], path, func(data json.RawMessage) error {
+		var result map[string]any
+		if err := json.Unmarshal(data, &result); err != nil {
+			return err
+		}
+		if result["status"] == "running" || result["status"] == "queued" {
+			fmt.Fprintln(s.errOut, "Recovery phase:", result["phase"])
+			return nil
+		}
+		return s.print(result)
+	})
 }

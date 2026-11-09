@@ -52,7 +52,7 @@ Both endpoints require the ordinary currently live bearer credential or protecte
 
 Connections rotate after 20 seconds, heartbeat every five seconds, and recheck authorization before snapshots and at heartbeats. Controller admission is limited to 32 status streams. Writes have a two-second deadline and occur outside controller and bus locks. Credential revocation ends delivery and a reconnect returns the ordinary unauthorized error.
 
-The CLI opens one upstream stream for all its browser tabs. Each browser uses an authenticated local SSE endpoint. Local stream admission is also bounded to 32. The internal bus stores one immutable JSON replacement; each subscriber has one coalescing notification. A slow viewer skips superseded observations and reads the latest complete state instead of blocking producers or accumulating an unbounded queue. This provides current state, not historical telemetry or an audit log.
+The CLI opens one upstream gRPC `WatchStatus` stream for all its browser tabs. Each browser uses an authenticated local SSE endpoint. Local stream admission is also bounded to 32. The internal bus stores one immutable JSON replacement; each subscriber has one coalescing notification. A slow viewer skips superseded observations and reads the latest complete state instead of blocking producers or accumulating an unbounded queue. This provides current state, not historical telemetry or an audit log.
 
 The public observation schema excludes deployment configuration, environment, secret references, encrypted records, free-form provider errors, probe output and workflow data. Usage includes numeric measurements, timestamps and fixed safe availability explanations. Existing operation-event streaming retains its durable log cursor and recovery contract independently.
 
@@ -64,7 +64,7 @@ The existing operation-event stream can still save previously uncommitted execut
 
 ## Embedded JetStream
 
-Every controller starts a private NATS server with JetStream inside the controller process. It uses `DontListen` and in-process connections: there is no external NATS service, client port, monitoring endpoint, cluster listener or browser connection to NATS. The CLI continues to use the authenticated HTTPS snapshot/SSE API.
+Every controller starts a private NATS server with JetStream inside the controller process. It uses `DontListen` and in-process connections: there is no external NATS service, client port, monitoring endpoint, cluster listener or browser connection to NATS. The CLI continues to use the authenticated gRPC command and status subscription.
 
 `internal/observation.Bus` separates capture from delivery. One background publisher queues completed public snapshots, waits for JetStream acknowledgements outside controller locks, and retries transient failures with capped backoff. Only one pending replacement is retained, so capture workers and normal controller operations do not wait for the broker. Retries use the snapshot identity for deduplication. A newer capture may supersede an unpublished replacement; this is a latest-state telemetry channel, not a command queue or complete event history.
 

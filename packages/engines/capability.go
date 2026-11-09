@@ -13,7 +13,7 @@ func (p Package) Capability() workflow.Capability {
 	// Existing Redis namespaces return a key prefix. PostgreSQL returns the database name.
 	if p.Engine == "postgres" {
 		modes = []string{"new-instance", "new-database"}
-		fields["database"] = map[string]any{"type": "string", "description": "Database name for new-database mode. New instances use app."}
+		fields["database"] = map[string]any{"type": "string", "description": "Optional database name for new-database mode; omitted names are derived from the stable workflow key. New instances use app."}
 		names = append(names, "database")
 	} else {
 		fields["keyPrefix"] = map[string]any{"type": "string", "description": "Key prefix for an existing Redis instance."}

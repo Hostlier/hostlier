@@ -28,6 +28,9 @@ on:
       - '!pkg/resourceprotocol/**'
       - '!internal/quality/**'
       - 'ui/**'
+      - 'scripts/build-cloud-sdk.mjs'
+      - 'packages/cloud-sdk/**'
+      - 'packages/cloud-sdk-go/**'
       - 'scripts/package-cli.sh'
       - 'scripts/package-minion.sh'
       - 'packages/minion/**'
@@ -57,6 +60,9 @@ on:
       - '!pkg/resourceprotocol/**'
       - '!internal/quality/**'
       - 'ui/**'
+      - 'scripts/build-cloud-sdk.mjs'
+      - 'packages/cloud-sdk/**'
+      - 'packages/cloud-sdk-go/**'
       - 'scripts/package-cli.sh'
       - 'scripts/package-minion.sh'
       - 'packages/minion/**'
@@ -92,6 +98,20 @@ jobs:
         run: |
           go mod download
           go mod verify
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '24.21.0'
+          cache: npm
+          cache-dependency-path: |
+            packages/cloud-sdk/package-lock.json
+            ui/package-lock.json
+      - name: Test and verify bundled Cloud SDKs
+        run: |
+          npm ci --prefix packages/cloud-sdk --no-audit --no-fund
+          npm test --prefix packages/cloud-sdk
+          npm ci --prefix ui --no-audit --no-fund
+          node scripts/build-cloud-sdk.mjs
+          git diff --exit-code -- packages/cloud-sdk/controller.proto internal/cli/cloud_sdk_assets
       - name: Verify separate executable dependencies
         run: ./scripts/check-binary-boundaries.sh
       - name: Static checks and race tests

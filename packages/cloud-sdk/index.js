@@ -6,6 +6,7 @@ import YAML from 'yaml';
 import { controllerRunner } from './controller.js';
 
 const namePattern = /^[a-z][a-z0-9-]{0,62}$/;
+const postgresDatabasePattern = /^[a-z][a-z0-9_]{0,47}$/;
 const variablePattern = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const sizeLimit = 1024 * 1024;
 
@@ -55,6 +56,15 @@ function sidecarSecretBindings(project, values) {
   }
 }
 
+function postgresDatabase(project, databaseName) {
+  if (databaseName === undefined) return;
+  if (typeof databaseName !== 'string' || !postgresDatabasePattern.test(databaseName)) throw new Error('Invalid PostgreSQL database name');
+  const steps = project.workflow?.steps;
+  const matches = Array.isArray(steps) ? steps.filter(item => item?.id === 'database') : [];
+  if (matches.length !== 1 || matches[0].package !== 'postgres' || matches[0].config?.mode !== 'new-database') throw new Error('Bundle does not declare a PostgreSQL new-database workflow step named database');
+  matches[0].config.database = databaseName;
+}
+
 function resources(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value) || typeof value.cpu !== 'string' || typeof value.memory !== 'string') throw new Error('CPU and memory must both be supplied as Hostlier quantities');
   return { cpu: value.cpu, memory: value.memory };
@@ -101,7 +111,7 @@ export async function createHostlierCloud(options) {
   const template = parseProject(source);
   const digest = createHash('sha256').update(source).digest('hex');
   const root = resolve(options.stateDirectory);
-  const execute = options.run ?? await controllerRunner({ credentialFile: options.credentialFile, allowInsecureLocalhost: options.allowInsecureLocalhost, fetch: options.fetch });
+  const execute = options.run ?? await controllerRunner({ credentialFile: options.credentialFile, allowInsecureLocalhost: options.allowInsecureLocalhost });
   const profile = options.server ? ['--server', options.server] : [];
   const invoke = (args, signal, cwd = root) => execute([...args, ...profile], { cwd, signal });
   const pathFor = id => join(root, identifier(id));
@@ -193,6 +203,46 @@ export async function createHostlierCloud(options) {
     if (!isDeepStrictEqual(await observed(name, signal, directory), project)) throw new Error('Hostlier desired configuration changed outside this SDK; inspect and reconcile it before another change');
   }
 
+  function createProject({ name, route, routes = {}, env = {}, secrets = {}, sidecarSecrets = {}, databaseName, compute, replicas }) {
+    identifier(name);
+    const project = structuredClone(template);
+    project.name = name;
+    if (!routes || typeof routes !== 'object' || Array.isArray(routes)) throw new Error('routes must map endpoint names to customer addresses');
+    if (project.endpoints && Object.keys(project.endpoints).length) {
+      const names = Object.keys(project.endpoints).sort();
+      const primary = project.primaryEndpoint || ['http', 'main', 'default'].find(name => name in project.endpoints) || names[0];
+      for (const endpointName of Object.keys(routes)) if (!(endpointName in project.endpoints)) throw new Error('Route names an unknown endpoint');
+      for (const [endpointName, endpoint] of Object.entries(project.endpoints)) {
+        if (endpoint.exposure !== 'public') continue;
+        const address = endpointName === primary ? route ?? routes[endpointName] : routes[endpointName];
+        if (typeof address !== 'string' || !address) throw new Error(`Customer route required for public endpoint ${endpointName}`);
+        endpoint.route = address;
+        if (endpointName === primary) project.route = address;
+      }
+    } else if (project.version === 1 || project.endpoint?.exposure === 'public') {
+      if (typeof route !== 'string' || !route) throw new Error('Customer route required for public application');
+      project.route = route;
+      if (project.endpoint) project.endpoint.route = route;
+    } else if (route !== undefined) {
+      throw new Error('Private application cannot receive a public route');
+    }
+    project.env = { ...project.env, ...environment(env) };
+    secretBindings(project.secrets, secrets);
+    sidecarSecretBindings(project, sidecarSecrets);
+    postgresDatabase(project, databaseName);
+    if (compute) project.resources = resources(compute);
+    if (replicas !== undefined) project.replicas = replicas;
+    return project;
+  }
+
+  function canonical(value) {
+    if (Array.isArray(value)) return value.map(canonical);
+    if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])]));
+    return value;
+  }
+
+  function createDigest(project) { return createHash('sha256').update(JSON.stringify(canonical(project))).digest('hex'); }
+
   return {
     bundleDigest: digest,
     async setSecret(name, value, { signal } = {}) {
@@ -225,7 +275,9 @@ export async function createHostlierCloud(options) {
         wanted.image = actual.image;
         if (wanted.source) wanted.source.image = actual.image;
         if (!ready(status) || actual.image !== expectedImageDigest || !isDeepStrictEqual(wanted, actual)) throw new Error('Pending operation is not confirmed ready with the exact desired project; reconcile manually');
-        await finish(directory, actual, { name, bundleDigest: digest });
+        const metadata = { name, bundleDigest: digest };
+        if (record.action === 'deploy') metadata.createDigest = createDigest(record.project);
+        await finish(directory, actual, metadata);
         return { ...status, ready: true };
       });
     },
@@ -278,36 +330,12 @@ export async function createHostlierCloud(options) {
         await markRetired(directory, name);
       });
     },
-    async create({ name, route, routes = {}, env = {}, secrets = {}, sidecarSecrets = {}, compute, replicas, signal }) {
+    async create(input) {
+      const { name, signal } = input;
       const directory = pathFor(name);
       return locked(directory, async () => {
-        const project = structuredClone(template);
-        project.name = name;
-        if (!routes || typeof routes !== 'object' || Array.isArray(routes)) throw new Error('routes must map endpoint names to customer addresses');
-        if (project.endpoints && Object.keys(project.endpoints).length) {
-          const names = Object.keys(project.endpoints).sort();
-          const primary = project.primaryEndpoint || ['http', 'main', 'default'].find(name => name in project.endpoints) || names[0];
-          for (const endpointName of Object.keys(routes)) if (!(endpointName in project.endpoints)) throw new Error('Route names an unknown endpoint');
-          for (const [endpointName, endpoint] of Object.entries(project.endpoints)) {
-            if (endpoint.exposure !== 'public') continue;
-            const address = endpointName === primary ? route ?? routes[endpointName] : routes[endpointName];
-            if (typeof address !== 'string' || !address) throw new Error(`Customer route required for public endpoint ${endpointName}`);
-            endpoint.route = address;
-            if (endpointName === primary) project.route = address;
-          }
-        } else if (project.version === 1 || project.endpoint?.exposure === 'public') {
-          if (typeof route !== 'string' || !route) throw new Error('Customer route required for public application');
-          project.route = route;
-          if (project.endpoint) project.endpoint.route = route;
-        } else if (route !== undefined) {
-          throw new Error('Private application cannot receive a public route');
-        }
-        project.env = { ...project.env, ...environment(env) };
-        secretBindings(project.secrets, secrets);
-        sidecarSecretBindings(project, sidecarSecrets);
-        if (compute) project.resources = resources(compute);
-        if (replicas !== undefined) project.replicas = replicas;
-        const metadata = { name, bundleDigest: digest };
+        const project = createProject(input);
+        const metadata = { name, bundleDigest: digest, createDigest: createDigest(project) };
         await assertNoPending(directory);
         try { await readFile(join(directory, 'retired.json')); throw new Error('Purged instance name cannot be reused without a new identity'); }
         catch (error) { if (error.code !== 'ENOENT') throw error; }
@@ -318,6 +346,31 @@ export async function createHostlierCloud(options) {
         return result;
       });
     },
+    async ensure(input) {
+      const { name, signal } = input;
+      const directory = pathFor(name);
+      return locked(directory, async () => {
+        const project = createProject(input);
+        await assertNoPending(directory);
+        try { await readFile(join(directory, 'retired.json')); throw new Error('Purged instance name cannot be reused without a new identity'); }
+        catch (error) { if (error.code !== 'ENOENT') throw error; }
+        let exists = true;
+        try { await readFile(join(directory, 'instance.json')); }
+        catch (error) { if (error.code === 'ENOENT') exists = false; else throw error; }
+        let status;
+        if (exists) {
+          const saved = await load(name);
+          if (saved.metadata.createDigest !== createDigest(project)) throw new Error('Requested instance project differs from the retained create intent; inspect it before changing desired state');
+          status = await readStatus(name, signal, directory);
+          if (!isDeepStrictEqual(confirmedSpec(status, name), saved.project)) throw new Error('Hostlier desired configuration changed outside this SDK; inspect and reconcile it before another change');
+        } else {
+          await apply(directory, project, 'deploy', signal);
+          await finish(directory, await observed(name, signal, directory), { name, bundleDigest: digest, createDigest: createDigest(project) });
+          status = await readStatus(name, signal, directory);
+        }
+        return { ...status, ready: ready(status) };
+      });
+    },
     async setEnvironment(name, changes, { signal } = {}) {
       const directory = pathFor(name);
       return locked(directory, async () => {
@@ -326,6 +379,7 @@ export async function createHostlierCloud(options) {
         await assertCurrent(name, project, signal, directory);
         project.env = { ...project.env, ...environment(changes) };
         const result = await apply(directory, project, 'update', signal);
+        delete metadata.createDigest;
         await finish(directory, await observed(name, signal, directory), metadata);
         return result;
       });
@@ -342,6 +396,7 @@ export async function createHostlierCloud(options) {
         await rm(candidate, { force: true });
         await pending(directory, 'compute', project);
         const result = await invoke(['scale', name, '--cpu', next.cpu, '--memory', next.memory], signal, directory);
+        delete metadata.createDigest;
         await finish(directory, await observed(name, signal, directory), metadata);
         return result;
       });
@@ -358,6 +413,7 @@ export async function createHostlierCloud(options) {
         if (oldBytes === undefined || newBytes === undefined || newBytes <= oldBytes) throw new Error('Sidecar volume must be declared and new size must be a valid expansion');
         declared.size = size;
         const result = await apply(directory, project, 'update', signal);
+        delete metadata.createDigest;
         await finish(directory, await observed(name, signal, directory), metadata);
         return result;
       });

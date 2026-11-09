@@ -34,7 +34,7 @@ func TestUsageCLIReadOnlyAuthenticatedMetrics(t *testing.T) {
 	}
 	defer server.Close(context.Background())
 	// Supply the fixture's explicit interactive approval response.
-	options := Options{CWD: dir, Home: filepath.Join(dir, "home"), Client: workflowAPI{handler: withFixtureHuman(t, server, server.LocalHandler())}, PollInterval: time.Millisecond, Prompt: func(string, bool) (string, error) { return "yes", nil }}
+	options := Options{CWD: dir, Home: filepath.Join(dir, "home"), Client: newWorkflowAPI(t, withFixtureHuman(t, server, server.LocalHandler())), PollInterval: time.Millisecond, Prompt: func(string, bool) (string, error) { return "yes", nil }}
 	_, err = invoke([]string{"deploy"}, "", options)
 	// An ordinary approved deployment establishes the fixture application before usage is queried.
 	if err != nil {

@@ -131,6 +131,7 @@ func (c *Controller) runRecoveryFinalization(copy *RecoveryJob, commit bool) {
 
 // persistRecoveryOutcome prevents a public success from releasing reservations when the durable write failed.
 func (c *Controller) persistRecoveryOutcome(job *RecoveryJob) {
+	c.signalJobChange()
 	// Propagate failure before performing the next recovery side effect.
 	if err := c.store.Save(c.state); err != nil {
 		job.Status = "uncertain"

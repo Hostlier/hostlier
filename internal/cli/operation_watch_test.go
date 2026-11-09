@@ -40,7 +40,7 @@ func (r *eventRequester) Request(_ context.Context, method, path string, body an
 }
 
 // WatchOperation captures explicit resume state and acknowledges each fixture event through the real CLI consumer.
-func (r *eventRequester) WatchOperation(ctx context.Context, _ string, cursor string, consume func(client.OperationEvent) error) error {
+func (r *eventRequester) WatchOperationOn(ctx context.Context, _, _ string, cursor string, consume func(client.OperationEvent) error) error {
 	r.watches++
 	r.cursor = cursor
 	// Local cancellation must remain distinct from a durable operation failing on the server.
@@ -74,8 +74,8 @@ func runEventCLI(t *testing.T, ctx context.Context, requester *eventRequester, a
 	return stdout.String(), stderr.String(), err
 }
 
-// TestLifecycleSSESeparatesProgressFromReceiptAndResult preserves automation-friendly stdout during normal operation waits.
-func TestLifecycleSSESeparatesProgressFromReceiptAndResult(t *testing.T) {
+// TestLifecycleStreamSeparatesProgressFromReceiptAndResult preserves automation-friendly stdout during normal operation waits.
+func TestLifecycleStreamSeparatesProgressFromReceiptAndResult(t *testing.T) {
 	requester := &eventRequester{events: cliOperationEvents("succeeded")}
 	stdout, stderr, err := runEventCLI(t, context.Background(), requester, []string{"restart", "app"})
 	// Exactly the receipt and final operation belong on stdout, with no intermediate running or log payload.
@@ -132,11 +132,11 @@ func TestWatchCancellationPreservesDurableReceipt(t *testing.T) {
 
 // TestStreamFallbackAndSemanticFailures separates an explicit capability gap from authentication or framing errors.
 func TestStreamFallbackAndSemanticFailures(t *testing.T) {
-	requester := &eventRequester{failure: client.ErrEventsUnsupported}
+	unsupported := model.Err("GRPC_UNSUPPORTED", "Controller does not support gRPC")
+	requester := &eventRequester{failure: unsupported}
 	stdout, _, err := runEventCLI(t, context.Background(), requester, []string{"operation", "job", "--watch"})
-	// An older server still completes via the established authenticated operation status endpoint.
-	if err != nil || !strings.Contains(stdout, "succeeded") || len(requester.requests) != 1 {
-		t.Fatal("verified old-server fallback failed")
+	if !errors.Is(err, unsupported) || stdout != "" || len(requester.requests) != 0 {
+		t.Fatal("unsupported stream attempted a fallback")
 	}
 	requester = &eventRequester{failure: model.Err("UNAUTHORIZED", "Unauthorized")}
 	_, _, err = runEventCLI(t, context.Background(), requester, []string{"operation", "job", "--watch"})

@@ -18,6 +18,11 @@ func (c *Controller) handle(w http.ResponseWriter, r *http.Request, local bool) 
 	if c.servePublicSurface(w, r, local) {
 		return
 	}
+	c.handleManagement(w, r, local)
+}
+
+// handleManagement is shared by the HTTP SDK and the CLI command RPC.
+func (c *Controller) handleManagement(w http.ResponseWriter, r *http.Request, local bool) {
 	// Collector writes and history queries never persist or lock deployment state during I/O.
 	if c.serveActivity(w, r, local) {
 		return
@@ -75,6 +80,7 @@ func (c *Controller) dispatchResponse(r *http.Request, local bool) ([]byte, erro
 	// Read-only requests never write the aggregate or incur SQLite synchronization.
 	if err == nil && r.Method != http.MethodGet && r.Method != http.MethodHead {
 		err = c.store.Save(c.state)
+		c.signalJobChange()
 	}
 	// Errors carry no state references and are serialized after releasing the lock.
 	if err != nil {

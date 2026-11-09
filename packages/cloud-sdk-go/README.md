@@ -6,7 +6,7 @@ Install the Go client from the Hostlier CLI into an existing Go module:
 hostlier sdk install cloud-go --directory ./backend
 ```
 
-The CLI copies the SDK source into `backend/hostliercloud` and adds the `gopkg.in/yaml.v3` requirement to `go.mod` if needed. It does not use npm, fetch the SDK, or contact a controller. The project needs a Go toolchain to build and may need normal Go module access to download the YAML dependency.
+The CLI copies the SDK source into `backend/hostliercloud` and adds the gRPC, protobuf and YAML requirements and checksums if needed. It does not use npm, fetch the SDK, or contact a controller. The project needs Go 1.24 or newer to build and may need normal Go module access to download these dependencies.
 
 Enroll a dedicated service device with `hostlier connect` using the product owner's account and grant it the required controller access. Export its signed credential once and provide the private file to the backend:
 
@@ -45,6 +45,8 @@ func provision() error {
 ```
 
 Replace `example.com/backend` with the module path reported by the install command. The SDK uses the same signed requests, plans, retained approvals, and operations as the Hostlier CLI. Provisioning needs an owner-approved all-access grant for dynamic application names, secrets, and purge. The credential file and instance state directory must be private and durable.
+
+The SDK uses native gRPC on the existing controller URL. It watches approvals, plans and operations on server streams and resumes interrupted observation without submitting the operation again. Upgrade the controller and its HTTP/2 proxy before reinstalling the SDK; there is no HTTP fallback.
 
 The vendor's `.hostlier` provides the image and complete application configuration. New instances override only customer identity, route, optional environment, compute, and declared stored-secret bindings. `Secrets` and `SidecarSecrets` accept only `secret://NAME` references for keys already declared in the bundle. `SetSecret(ctx, name, value)` writes a controller-wide stored secret through the controller API. For a customer's private secret, use `SetInstanceSecret(ctx, appName, name, value)`: the controller records the owning application, rejects use by other apps, and removes the encrypted secret and upload receipt after a successful app purge. Values never enter arguments, project files, or SDK state. A successful operation saves the controller's resolved image digest and complete desired project. A later change checks for out-of-band edits and refuses to overwrite them.
 

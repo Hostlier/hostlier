@@ -82,5 +82,5 @@ func (s *session) enrollmentRemote(address string) (Requester, error) {
 	if s.options.Client != nil {
 		return s.options.Client, nil
 	}
-	return client.New(client.Options{URL: address})
+	return client.NewGRPC(client.Options{URL: address})
 }

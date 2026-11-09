@@ -13,7 +13,7 @@ import (
 //go:embed cloud_sdk_assets/*
 var cloudSDKAssets embed.FS
 
-var cloudSDKFiles = []string{"index.js", "index.d.ts", "package.json", "YAML-LICENSE"}
+var cloudSDKFiles = []string{"index.js", "index.d.ts", "package.json", "YAML-LICENSE", "THIRD-PARTY-NOTICES", "controller.proto"}
 
 // installCloudSDK writes the self-contained Node client shipped in this exact CLI release.
 func (s *session) installCloudSDK() error {

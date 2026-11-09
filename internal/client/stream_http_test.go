@@ -4,54 +4,14 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
-	"strings"
+
 	"testing"
 	"time"
 )
-
-// TestLegacyEventFallbackRequiresExistingOperation distinguishes old-server capability gaps from missing jobs.
-func TestLegacyEventFallbackRequiresExistingOperation(t *testing.T) {
-	// Both conventional unsupported-endpoint responses need the same independent identity check.
-	for _, status := range []int{404, 405} {
-		checkLegacyEventFallback(t, status)
-	}
-}
-
-// checkLegacyEventFallback checks existing and genuinely missing operation responses for one legacy endpoint status.
-func checkLegacyEventFallback(t *testing.T, status int) {
-	// A missing job must never become an unbounded compatibility-polling loop.
-	for _, exists := range []bool{true, false} {
-		calls := 0
-		// Serve an unsupported events endpoint and a separately authenticated operation lookup.
-		c := &Client{URL: "https://controller.test", HTTP: &http.Client{Transport: eventTransport(func(request *http.Request) (*http.Response, error) {
-			calls++
-			return legacyResponse(request, status, exists), nil
-		})}}
-		err := c.WatchOperation(context.Background(), "job", "", discardOperationEvent)
-		// Only a verified existing operation permits the exported capability fallback sentinel.
-		if errors.Is(err, ErrEventsUnsupported) != exists || calls != 2 {
-			t.Fatal("legacy fallback ignored operation existence")
-		}
-	}
-}
-
-// legacyResponse emulates older routing without changing the operation lookup's semantic errors.
-func legacyResponse(request *http.Request, status int, exists bool) *http.Response {
-	// The event subresource is absent on this server regardless of whether the durable operation exists.
-	if strings.HasSuffix(request.URL.Path, "/events") {
-		return eventResponse(status, "")
-	}
-	// A real operation proves that polling compatibility is appropriate.
-	if exists {
-		return eventResponse(200, `{"id":"job","status":"running"}`)
-	}
-	return eventResponse(404, `{"error":{"code":"OPERATION_NOT_FOUND","message":"Operation not found"}}`)
-}
 
 // discardOperationEvent acknowledges fixture events without altering their cursor or payload.
 func discardOperationEvent(OperationEvent) error { return nil }
@@ -59,7 +19,7 @@ func discardOperationEvent(OperationEvent) error { return nil }
 // TestStreamSemanticResponsesDoNotRetry protects authorization, cursor and redirect boundaries.
 func TestStreamSemanticResponsesDoNotRetry(t *testing.T) {
 	// None of these responses is an interrupted successful stream eligible for automatic reconnection.
-	for _, status := range []int{400, 401, 403, 204, 302, 500} {
+	for _, status := range []int{400, 401, 403, 404, 405, 204, 302, 500} {
 		checkPermanentStreamStatus(t, status)
 	}
 }

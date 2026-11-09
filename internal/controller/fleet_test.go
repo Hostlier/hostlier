@@ -45,6 +45,7 @@ func enrolledHostFixture(t *testing.T, f *humanFixture, name string) (*Controlle
 		t.Fatal(err)
 	}
 	server := httptest.NewUnstartedServer(host.remoteListenerHandler(options))
+	server.EnableHTTP2 = true
 	server.TLS = options.TLSConfig
 	server.StartTLS()
 	t.Cleanup(server.Close)

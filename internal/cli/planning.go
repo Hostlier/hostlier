@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,16 +26,12 @@ func (s *session) prepareReviewedPlan(flow planFlow, plan *map[string]any) error
 		return s.request("POST", flow.path, flow.body, plan)
 	}
 	receipt, err := s.acceptPlanning(flow)
-	// Older controllers explicitly lacking the endpoint retain compatibility.
-	if planningErrorCode(err) == "NOT_FOUND" {
-		return s.request("POST", flow.path, flow.body, plan)
-	}
 	// Stop before publishing an incomplete or invalid preparation.
 	if err != nil {
 		return err
 	}
 	fmt.Fprintln(s.errOut, "Planning job "+receipt.ID+": preparing review; no deployment approved.")
-	return s.pollPlanning(receipt, plan)
+	return s.finishPlanning(receipt, plan)
 }
 
 // asynchronousPlan selects workflows independent of provider package naming.
@@ -76,37 +73,24 @@ func (s *session) acceptPlanning(flow planFlow) (planningReceipt, error) {
 	}
 }
 
-// pollPlanning reconnects observation without executing or approving deployment work.
-func (s *session) pollPlanning(receipt planningReceipt, plan *map[string]any) error {
-	// Check each declared identity against the explicit contract.
-	for {
-		// Completed preparation still requires the ordinary exact fingerprint approval.
-		if receipt.Status == "completed" {
-			// Keep private preparation within its bounded validated contract.
-			if receipt.Plan == nil {
-				return model.Err("INVALID_RESPONSE", "Planning returned no reviewed plan")
-			}
-			*plan = receipt.Plan
-			return nil
-		}
-		// Keep private preparation within its bounded validated contract.
-		if receipt.Error != nil {
-			return receipt.Error
-		}
-		// Interrupted jobs are never silently reissued after controller restart.
-		if receipt.Status != "queued" && receipt.Status != "running" {
-			return model.Err("RECOVERY_REQUIRED", "Planning interrupted; request a new plan")
-		}
-		// Stop before publishing an incomplete or invalid preparation.
-		if err := s.pause(); err != nil {
-			return err
-		}
-		err := s.request("GET", "/v1/planning/"+url.PathEscape(receipt.ID), nil, &receipt)
-		// A disconnected observation retries the same durable job identity.
-		if err != nil && planningErrorCode(err) != "CONNECTION" {
+// Wait on the durable preparation without issuing progress reads or resubmitting it.
+func (s *session) finishPlanning(receipt planningReceipt, plan *map[string]any) error {
+	if receipt.Status == "queued" || receipt.Status == "running" {
+		if err := s.watchReceipt(s.flags["on"], "/v1/planning/"+url.PathEscape(receipt.ID), func(data json.RawMessage) error { return json.Unmarshal(data, &receipt) }); err != nil {
 			return err
 		}
 	}
+	if receipt.Error != nil {
+		return receipt.Error
+	}
+	if receipt.Status != "completed" {
+		return model.Err("RECOVERY_REQUIRED", "Planning interrupted; request a new plan")
+	}
+	if receipt.Plan == nil {
+		return model.Err("INVALID_RESPONSE", "Planning returned no reviewed plan")
+	}
+	*plan = receipt.Plan
+	return nil
 }
 
 // planningErrorCode classifies safe controller errors without inspecting transport diagnostics.
@@ -117,4 +101,15 @@ func planningErrorCode(err error) string {
 		return failure.Code
 	}
 	return ""
+}
+
+type jobWatcher interface {
+	WatchJob(context.Context, string, string, func(json.RawMessage) error) error
+}
+
+func (s *session) watchReceipt(host, path string, consume func(json.RawMessage) error) error {
+	if watcher, ok := s.remote.(jobWatcher); ok {
+		return watcher.WatchJob(s.ctx, host, path, consume)
+	}
+	return model.Err("EVENTS_UNSUPPORTED", "Controller does not support gRPC job subscriptions")
 }

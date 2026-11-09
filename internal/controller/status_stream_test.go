@@ -22,7 +22,9 @@ func TestStatusStreamTLSReconnectAndRevocation(t *testing.T) {
 	c.mu.Lock()
 	issued := c.credentials("status watcher")
 	c.mu.Unlock()
-	server := httptest.NewTLSServer(c.Handler())
+	server := httptest.NewUnstartedServer(c.Handler())
+	server.EnableHTTP2 = true
+	server.StartTLS()
 	defer server.Close()
 	remote := statusTLSClient(t, server, issued["token"].(string))
 	// A new connection always receives the latest replacement, even after missing intermediate samples.
@@ -44,7 +46,7 @@ func statusTLSClient(t *testing.T, server *httptest.Server, token string) *clien
 	if err := os.WriteFile(path, data, 0600); err != nil {
 		t.Fatal(err)
 	}
-	remote, err := client.New(client.Options{URL: server.URL, Token: token, CAFile: path})
+	remote, err := client.NewGRPC(client.Options{URL: server.URL, Token: token, CAFile: path})
 	// An invalid test TLS client must fail before any watch attempts.
 	if err != nil {
 		t.Fatal(err)

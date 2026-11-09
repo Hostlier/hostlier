@@ -137,6 +137,8 @@ func (c *Controller) runPlanning(id string) {
 	if job == nil || job.Status != "queued" || c.closed {
 		return
 	}
+	defer c.signalJobChange()
+	c.signalJobChange()
 	job.Status = "running"
 	// An unavailable durable store prevents provider inspection.
 	if err := c.store.Save(c.state); err != nil {
