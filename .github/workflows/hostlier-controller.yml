@@ -138,6 +138,49 @@ jobs:
           retention-days: 14
           compression-level: 0
 
+  mac-controller:
+    name: macOS controller / ${{ matrix.arch }}
+    needs: test
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15-intel
+            arch: amd64
+          - runner: macos-15
+            arch: arm64
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: '1.27.3'
+          cache-dependency-path: go.sum
+      - name: Build and smoke-test macOS controller
+        env:
+          TARGET_ARCH: ${{ matrix.arch }}
+        run: |
+          mkdir -p dist/releases
+          binary="hostlier-controller-darwin-${TARGET_ARCH}"
+          CGO_ENABLED=0 GOWORK=off GOOS=darwin GOARCH="$TARGET_ARCH" \
+            go build -mod=readonly -trimpath -ldflags='-s -w' -o "dist/releases/$binary" ./cmd/hostlier-controller
+          (cd dist/releases && shasum -a 256 "$binary" > "$binary.sha256")
+          (cd dist/releases && shasum -a 256 -c "$binary.sha256")
+          "dist/releases/$binary" help
+      - name: Upload macOS controller and checksum
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: hostlier-controller-darwin-${{ matrix.arch }}
+          path: |
+            dist/releases/hostlier-controller-darwin-${{ matrix.arch }}
+            dist/releases/hostlier-controller-darwin-${{ matrix.arch }}.sha256
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
   publish:
     name: Publish verified controller release
     needs: controller

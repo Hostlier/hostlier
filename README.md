@@ -9,8 +9,8 @@ plans, and deploys each change.
 1. Prepare an [Ubuntu server](docs/guides/install.md), a domain pointed at it,
    and ports 80 and 443. Download the matching controller bundle from
    [Releases](https://github.com/Hostlier/hostlier/releases). Verify the published
-   checksum, then extract the controller bundle on the server. Build the CLI from
-   source using the [build guide](docs/guides/build.md).
+   checksum, then extract the controller bundle on the server. Get the CLI from
+   the [CI artifacts or build it from source](docs/guides/build.md).
 2. Install the controller. It shows the proposed changes before applying them:
 
    ```sh
