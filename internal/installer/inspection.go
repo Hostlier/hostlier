@@ -70,6 +70,10 @@ func inspectPackageVersions(ctx context.Context, p *Plan) {
 // inspectInstallationRecord loads prior ownership and rejects backend migration.
 func inspectInstallationRecord(ctx context.Context, p *Plan) {
 	o := p.Options
+	// An unresolved prerequisite transaction owns its cluster and swap recovery sources.
+	if _, err := os.Lstat(filepath.Join(o.StateDir, "migration-preparation-active")); !os.IsNotExist(err) {
+		p.Errors = append(p.Errors, "Migration preparation is unresolved; inspect its retained journal and finish rollback before init or update.")
+	}
 	// Preserve failure before advancing to the next external-effect boundary.
 	if _, err := os.Lstat(filepath.Join(o.StateDir, "migration-active")); !os.IsNotExist(err) {
 		p.Errors = append(p.Errors, "Runtime migration is active; use hostlier-controller migrate status/rollback before init or update.")
@@ -224,9 +228,6 @@ func ubuntuVersion(release string) string {
 func platformProblem(release, goos, goarch string, options Options) string {
 	if goos != "linux" || goarch != "amd64" && goarch != "arm64" || !regexp.MustCompile(`(?m)^ID=ubuntu$`).MatchString(release) {
 		return "Only Ubuntu 24.04 LTS or Ubuntu 26.04 LTS on amd64 or arm64 is supported."
-	}
-	if ubuntuVersion(release) == "26.04" && options.Runtime != "docker" {
-		return "Ubuntu 26.04 LTS currently supports the Docker runtime; k3s installation still requires Ubuntu 24.04 LTS."
 	}
 	if ubuntuVersion(release) != "" {
 		return ""

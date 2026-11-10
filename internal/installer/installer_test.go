@@ -101,8 +101,11 @@ func TestUbuntu2604PlatformBoundary(t *testing.T) {
 	if problem := platformProblem(resolute, "linux", "arm64", docker); problem != "" {
 		t.Fatal(problem)
 	}
-	if problem := platformProblem(resolute, "linux", "amd64", Options{Runtime: "k3s"}); !strings.Contains(problem, "k3s installation") {
-		t.Fatal("26.04 admitted untested k3s path", problem)
+	if problem := platformProblem(resolute, "linux", "amd64", Options{Runtime: "k3s"}); problem != "" {
+		t.Fatal("26.04 rejected k3s", problem)
+	}
+	if problem := platformProblem(resolute, "linux", "arm64", Options{Runtime: "k3s"}); problem != "" {
+		t.Fatal("26.04 arm64 rejected k3s", problem)
 	}
 	if problem := platformProblem(noble, "linux", "amd64", Options{Runtime: "k3s"}); problem != "" {
 		t.Fatal(problem)

@@ -95,8 +95,9 @@ def setup():
     os.chdir(ROOT)
     run("systemctl", "enable", "--now", "docker", "nginx")
     run("openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "2",
-        "-subj", "/CN=Disposable migration CA", "-keyout", "ca.key", "-out", "ca.crt")
-    Path("extensions").write_text(f"subjectAltName=DNS:{CONTROL},DNS:{APP},DNS:localhost\nextendedKeyUsage=serverAuth\n")
+        "-subj", "/CN=Disposable migration CA", "-addext", "basicConstraints=critical,CA:TRUE",
+        "-addext", "keyUsage=critical,keyCertSign,cRLSign", "-keyout", "ca.key", "-out", "ca.crt")
+    Path("extensions").write_text(f"subjectAltName=DNS:{CONTROL},DNS:{APP},DNS:localhost\nextendedKeyUsage=serverAuth\nkeyUsage=critical,digitalSignature,keyEncipherment\nauthorityKeyIdentifier=keyid,issuer\n")
     run("openssl", "req", "-newkey", "rsa:2048", "-nodes", "-subj", "/CN=" + CONTROL,
         "-keyout", "leaf.key", "-out", "leaf.csr")
     run("openssl", "x509", "-req", "-in", "leaf.csr", "-CA", "ca.crt", "-CAkey", "ca.key",
@@ -245,7 +246,7 @@ def crash_recovery():
 
 
 if __name__ == "__main__":
-    check(os.geteuid() == 0 and os.uname().nodename in ("hostlier-runtime-migration-test", "lima-hostlier-runtime-migration-test"),
+    check(os.geteuid() == 0 and os.uname().nodename in ("hostlier-runtime-migration-test", "lima-hostlier-runtime-migration-test", "lima-hostlier-ubuntu2604"),
           "Refusing to run outside the named disposable migration VM")
     if sys.argv[1] == "setup":
         setup()

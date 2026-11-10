@@ -9,8 +9,19 @@ import (
 	"time"
 
 	"hostlier/internal/migration"
+	"hostlier/internal/migrationprep"
 	"hostlier/internal/model"
 )
+
+// PreviewPreparation reads both prerequisite action plans using the saved owner login.
+func (m *serverMaintenance) PreviewPreparation(ctx context.Context, backup string) (json.RawMessage, error) {
+	p, err := migrationprep.Inspect(ctx, migrationprep.Options{StateDir: m.stateDir, BackupDir: backup, DisableSwap: true, QuarantineK3s: true})
+	// Keep raw privileged inspection diagnostics out of the public error envelope.
+	if err != nil {
+		return nil, model.Err("PREPARATION_PREVIEW_FAILED", "Use a new absolute preparation backup directory with a protected existing parent outside controller and cluster state")
+	}
+	return json.Marshal(p)
+}
 
 // PreviewMigration inspects committed state and host facts without stopping any service.
 func (m *serverMaintenance) PreviewMigration(ctx context.Context, backup string) (json.RawMessage, error) {

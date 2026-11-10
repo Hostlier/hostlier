@@ -47,3 +47,9 @@ type ControllerMaintenance interface {
 	StartUpdate(context.Context, string, int64, ControllerUpdateRequest) (ControllerUpdateJob, error)
 	UpdateStatus(context.Context, string, string) (ControllerUpdateJob, error)
 }
+
+// ControllerMigrationPreparation optionally exposes read-only prerequisite inspection.
+// Preparation apply/rollback remain local administrator operations, never remote commands.
+type ControllerMigrationPreparation interface {
+	PreviewPreparation(context.Context, string) (json.RawMessage, error)
+}

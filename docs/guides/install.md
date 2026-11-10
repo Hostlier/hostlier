@@ -2,7 +2,7 @@
 
 [All guides](../../GUIDE.md)
 
-Start with an Ubuntu 24.04 LTS server, or Ubuntu 26.04 LTS when using Docker. Download the controller bundle for its architecture, verify its checksum, and extract it. The directory must contain `hostlier-controller` and `collector-image/`. Install the separate CLI on your laptop. See [building a release](build.md#build-a-server-release).
+Start with an Ubuntu 24.04 or 26.04 LTS server. Download the controller bundle for its architecture, verify its checksum, and extract it. The directory must contain `hostlier-controller` and `collector-image/`. Install the separate CLI on your laptop. See [building a release](build.md#build-a-server-release).
 
 Point the deployment domain and intended application hostnames at your server. The controller defaults to `hostlier.<domain>`. On the supported server, run the matching Linux executable:
 
@@ -74,7 +74,7 @@ hostlier connect admin@box.example.com
 hostlier status
 ```
 
-`connect` selects the verified box for subsequent workload commands. To enroll it and keep your current selection, use `hostlier server add admin@box.example.com`. The box needs Ubuntu 24.04, or Ubuntu 26.04 with Docker, and an SSH account with root or passwordless sudo. Point the controller and application DNS names at the box and allow web traffic on TCP 80 and 443. The master must be able to reach TCP 7464 on the box.
+`connect` selects the verified box for subsequent workload commands. To enroll it and keep your current selection, use `hostlier server add admin@box.example.com`. The box needs Ubuntu 24.04 or 26.04 LTS, and an SSH account with root or passwordless sudo. Point the controller and application DNS names at the box and allow web traffic on TCP 80 and 443. The master must be able to reach TCP 7464 on the box.
 
 The CLI uses one SSH session to install the per-box controller and exchange public identities. Approve enrollment on the selected master. The CLI checks that the master can read the box’s state over mutually authenticated TLS. Workload commands subsequently use that connection. If the reachability check fails, correct the network path and rerun the command.
 

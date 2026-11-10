@@ -32,6 +32,10 @@ func (s *session) controllerMaintenanceCommand() error {
 		return s.controllerUpdateStatus(s.target, s.flags["watch"] != "")
 	// Remote migration execution is deliberately absent from this read-only command.
 	case "migrate":
+		// Preparation is another fixed read-only route; local remediation is never exposed.
+		if s.validPreparationPreviewInvocation() {
+			return s.previewControllerPreparation()
+		}
 		// Require the read-only command and an explicit server backup destination.
 		if !s.validMigrationPreviewInvocation() {
 			return model.Err("ARGUMENTS", "Usage: hostlier server controller migrate plan --to k3s --backup-dir NEW_SERVER_DIRECTORY [--server NAME]")
@@ -39,6 +43,21 @@ func (s *session) controllerMaintenanceCommand() error {
 		return s.previewControllerMigration()
 	}
 	return model.Err("ARGUMENTS", "Unsupported controller maintenance command")
+}
+
+// validPreparationPreviewInvocation admits only the fixed read-only prerequisite preview.
+func (s *session) validPreparationPreviewInvocation() bool {
+	return len(s.parsed.args) == 3 && s.target == "prepare" && s.flags["backup-dir"] != ""
+}
+
+// previewControllerPreparation inspects reversible prerequisite actions without SSH or host changes.
+func (s *session) previewControllerPreparation() error {
+	// New prerequisite previews require an explicitly advertised server capability.
+	if err := s.requireControllerCapability("migrationPreparation"); err != nil {
+		return err
+	}
+	query := url.Values{"backupDir": {s.flags["backup-dir"]}}
+	return s.getPrint("/v1/controller/migration/preparation?" + query.Encode())
 }
 
 // validMigrationPreviewInvocation admits only the read-only Docker to k3s preview.
@@ -56,6 +75,10 @@ func (s *session) requireControllerCapability(feature string) error {
 	}
 	// Explain the initial server upgrade instead of attempting another transport.
 	if !capabilities[feature] {
+		// A maintenance-capable controller can perform its own approved upgrade without SSH.
+		if capabilities["updates"] {
+			return model.Err("CONTROLLER_UPGRADE_REQUIRED", "Upgrade this controller through server controller update to enable the requested maintenance feature")
+		}
 		return model.Err("CONTROLLER_UPGRADE_REQUIRED", "This controller needs one initial administrator upgrade to a maintenance-capable release; updating the CLI alone cannot add server support")
 	}
 	return nil

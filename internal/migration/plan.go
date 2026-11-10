@@ -226,6 +226,10 @@ func (p *Plan) checkApplication(app *controller.Application) {
 
 // inspectRetry authorizes reuse only through a fully resolved previous journal.
 func (p *Plan) inspectRetry() error {
+	// An interrupted prerequisite change must be resolved before starting runtime migration.
+	if _, err := os.Lstat(filepath.Join(p.StateDir, "migration-preparation-active")); !os.IsNotExist(err) {
+		p.Errors = append(p.Errors, "Migration preparation is unresolved; inspect its journal and rollback before migration")
+	}
 	// Reuse prior recovery state only through the reviewed retry path.
 	if p.Retry {
 		prior, err := Read(p.StateDir)

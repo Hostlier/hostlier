@@ -35,6 +35,10 @@ type migrationInvocation struct {
 
 // runMigration parses and previews before invoking any privileged execution path.
 func runMigration(ctx context.Context, args []string, in io.Reader, out, errOut io.Writer, deps migrationDependencies) error {
+	// Prerequisite preparation has its own journal and never enters runtime migration apply.
+	if len(args) > 0 && args[0] == "prepare" {
+		return runPreparation(ctx, args[1:], in, out, errOut)
+	}
 	c, err := parseMigration(args, in, out, errOut, deps)
 	// Preserve failure before advancing to the next external-effect boundary.
 	if errors.Is(err, flag.ErrHelp) {

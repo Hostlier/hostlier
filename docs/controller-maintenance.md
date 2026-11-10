@@ -112,3 +112,13 @@ Controller metadata backups retain update receipts for interruption diagnosis bu
 exclude staged executables, installer logs and collector payloads. Restoring a
 backup does not restore or replay a systemd update unit. Keep the original source
 stopped as required by controller recovery.
+
+### Prerequisite preparation preview
+
+`hostlier server controller migrate prepare --backup-dir NEW_PREPARATION_DIRECTORY
+--server default` reads the reversible swap/k3s quarantine plan using the same
+owner-only signed gRPC login. It needs the `migrationPreparation` capability.
+The fixed logical GET route is `/v1/controller/migration/preparation?backupDir=...`;
+there is no remote preparation apply, rollback, uninstall or runtime-migration
+execution route. See [prerequisite preparation](runtime-migration.md#reversible-prerequisite-preparation)
+for the separate local administrator workflow and its retained backups.

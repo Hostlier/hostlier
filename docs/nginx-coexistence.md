@@ -34,7 +34,7 @@ Do not edit the generated include manually. Hostlier detects changes to its reco
 
 ## Supported existing setup
 
-- Ubuntu 24.04 or 26.04 LTS, amd64 or arm64, with systemd. Ubuntu 26.04 currently supports the Docker runtime; k3s remains limited to 24.04. Existing Docker and Nginx are reused when compatible. Missing packages use pins for the selected Ubuntu release.
+- Ubuntu 24.04 or 26.04 LTS, amd64 or arm64, with systemd. Existing Docker and Nginx are reused when compatible. Missing packages use pins for the selected Ubuntu release.
 - When reusing Docker: a running rootful Linux Docker Engine **28.x or 29.x** at `/var/run/docker.sock`. Docker's packaging source does not matter. Docker contexts, rootless Docker and remote engines are not supported in this mode.
 - When reusing Nginx: a running host-installed `/usr/sbin/nginx` managed by `nginx.service`, using `/etc/nginx/nginx.conf` without a custom `-p` prefix. A unit may supply that same config path through `-c` or an expanded environment variable when the running master confirms it. Containerized Nginx is outside this first version.
 - An existing `include /etc/nginx/conf.d/*.conf;` directly inside the main `http` block. Hostlier never inserts it into the user's configuration.

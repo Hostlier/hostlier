@@ -89,7 +89,8 @@ func (c *Controller) maintenanceAdministrator(actor string) error {
 func (c *Controller) maintenanceRead(r *http.Request, actor string, generation int64) (any, error) {
 	// Capabilities let a newer CLI explain the one-time bootstrap requirement.
 	if r.URL.Path == "/v1/controller/capabilities" {
-		return map[string]bool{"updates": c.opts.Maintenance != nil, "migrationPreview": c.opts.Maintenance != nil}, nil
+		_, preparation := c.opts.Maintenance.(model.ControllerMigrationPreparation)
+		return map[string]bool{"updates": c.opts.Maintenance != nil, "migrationPreview": c.opts.Maintenance != nil, "migrationPreparation": preparation}, nil
 	}
 	// Embedded/test controllers cannot accidentally gain privileged execution.
 	if c.opts.Maintenance == nil {
@@ -97,6 +98,14 @@ func (c *Controller) maintenanceRead(r *http.Request, actor string, generation i
 	}
 	// Dispatch only the fixed maintenance operations supported by this interface.
 	switch r.URL.Path {
+	// Prerequisite inspection never invokes local preparation apply or rollback.
+	case "/v1/controller/migration/preparation":
+		provider, ok := c.opts.Maintenance.(model.ControllerMigrationPreparation)
+		// Older embedded providers cannot implicitly gain host remediation support.
+		if !ok {
+			return nil, model.Err("MAINTENANCE_UNAVAILABLE", "Upgrade the controller for migration preparation previews")
+		}
+		return provider.PreviewPreparation(r.Context(), r.URL.Query().Get("backupDir"))
 	// Source paths and credentials come only from the installed server configuration.
 	case "/v1/controller/migration/plan":
 		// Reject runtime directions outside the supported Docker to k3s migration.

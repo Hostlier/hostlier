@@ -1,6 +1,6 @@
 # Docker to k3s migration
 
-Hostlier can migrate a standalone Ubuntu 24.04 server from Docker to its pinned,
+Hostlier can migrate a standalone Ubuntu 24.04 or 26.04 LTS server from Docker to its pinned,
 single-node k3s runtime. It covers running applications, primary and sidecar
 volumes, immutable images, exact secret revisions, managed config files, and
 public routes. The existing Caddy or Nginx installation is preserved.
@@ -155,3 +155,86 @@ symlinks. The full Go suite passed with package concurrency limited to one;
 affected-package race checks and vet passed. The repository-wide quality gate
 still reports unrelated existing findings; the new migration code has no
 findings under its default complexity and comment rules.
+
+## Reversible prerequisite preparation
+
+Ubuntu 24.04 and 26.04 LTS are supported for the pinned k3s installer on amd64
+and arm64. Platform support does not waive swap, confinement, ownership or
+storage checks. Preparation and runtime migration are separate approvals.
+
+Use your existing CLI login for a **read-only** preparation review:
+
+```sh
+hostlier server controller migrate prepare \
+  --backup-dir /var/backups/hostlier-preparation-v0.1.4 --server default
+```
+
+The backup parent must already exist, be protected against other users writing
+or replacing it, and be outside controller and cluster state. This preview does
+not create the directory. The migration backup directory must be a different,
+new directory. Preparation execution and rollback are local administrator
+commands; no remote arbitrary command or migration execution endpoint is added.
+
+Before quarantining an external cluster, its administrator must review workloads,
+namespaces, persistent volumes/claims, custom resources and external dependencies,
+and export any data needed outside the local cluster. Drain and stop that cluster
+using its own reviewed operational procedure, disable its service, and confirm
+its child processes and mounts have stopped. Preparation never stops an external
+cluster, runs its uninstall script, formats swap or deletes cluster data. Active,
+enabled, unknown, nonstandard, mounted or redirected cluster state remains blocked.
+Custom datastore/data-directory settings and configuration overrides require a
+separate export/review; the tool does not claim to back up external databases.
+
+On the server, select either action or both and save the displayed fingerprint:
+
+```sh
+sudo hostlier-controller migrate prepare plan \
+  --backup-dir /var/backups/hostlier-preparation-v0.1.4 \
+  --disable-swap --quarantine-k3s
+```
+
+Only after reviewing a blocker-free plan, use the **same options** and its exact
+fingerprint. This applies prerequisites only, and leaves Docker applications
+running:
+
+```sh
+sudo hostlier-controller migrate prepare apply \
+  --backup-dir /var/backups/hostlier-preparation-v0.1.4 \
+  --disable-swap --quarantine-k3s --fingerprint REVIEWED_SHA256
+```
+
+Every standard cluster asset gets a private independent GNU tar archive with ACLs,
+extended attributes, numeric ownership and sparse-file preservation. All archive
+bytes are read back and their contents compared with the cold sources before any
+asset moves. Same-filesystem quarantine renames retain the original data. The
+journal records intent before each boundary, so interruption does not imply that
+preparation completed. At least 1 GiB free disk headroom is retained.
+
+Swap preparation saves exact fstab bytes and the original activation paths and
+priorities, comments only fstab swap entries, and persistently masks only reviewed,
+previously unmasked swap units. It refuses separately managed swap generators and
+native `/etc` units that cannot be masked without replacing definitions. Immediately
+before swapoff, available RAM must exceed used swap plus the larger of 1 GiB or
+10% of RAM. Backing files/devices are retained. A failed swapoff leaves a recovery
+journal; memory pressure must be investigated before continuing.
+
+Inspect or roll back a partial or completed preparation using its retained backup:
+
+```sh
+sudo hostlier-controller migrate prepare status \
+  --backup-dir /var/backups/hostlier-preparation-v0.1.4
+sudo hostlier-controller migrate prepare rollback \
+  --backup-dir /var/backups/hostlier-preparation-v0.1.4
+```
+
+Rollback verifies all backups and original/quarantined bytes first, refuses changed
+fstab, foreign masks and replacement cluster files, restores the original files
+without starting Kubernetes, then restores only the original active swap mappings.
+Explicit nonnegative priorities are preserved; kernel-assigned negative priorities
+are allocated again by the kernel. All backups and the journal remain. Runtime
+migration rollback is a separate workflow; if migration installed replacement
+cluster assets, reconcile those explicitly before restoring an older external
+cluster. Unresolved preparation blocks installation/update and migration.
+
+After successful preparation, rerun the ordinary **migration plan** and review it
+again. Preparation never automatically applies runtime migration.

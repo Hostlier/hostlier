@@ -20,6 +20,12 @@ type maintenanceProvider struct {
 	started, release chan struct{}
 }
 
+// PreviewPreparation shares the provider's inspection counter and never starts a host operation.
+func (m *maintenanceProvider) PreviewPreparation(_ context.Context, backup string) (json.RawMessage, error) {
+	m.previews.Add(1)
+	return json.Marshal(map[string]any{"backupDirectory": backup, "errors": []string{"external cluster active"}})
+}
+
 // PreviewMigration waits only when exercising lock-free inspection.
 func (m *maintenanceProvider) PreviewMigration(ctx context.Context, backup string) (json.RawMessage, error) {
 	m.previews.Add(1)
@@ -75,7 +81,7 @@ func TestMaintenanceRequiresOwnerLogin(t *testing.T) {
 	defer closeController(t, c)
 	provider := &maintenanceProvider{}
 	c.opts.Maintenance = provider
-	paths := []string{"/v1/controller/capabilities", "/v1/controller/migration/plan?to=k3s&backupDir=/backup/new", "/v1/controller/update/plan", "/v1/controller/update/jobs/job"}
+	paths := []string{"/v1/controller/capabilities", "/v1/controller/migration/plan?to=k3s&backupDir=/backup/new", "/v1/controller/migration/preparation?backupDir=/backup/preparation", "/v1/controller/update/plan", "/v1/controller/update/jobs/job"}
 	// Check each maintenance case without sharing its accepted execution state.
 	for _, path := range paths {
 		status, _ := humanHTTP(t, c, false, "GET", path, nil, "", "")
@@ -116,6 +122,14 @@ func TestMaintenanceGRPCSavedLoginAndApproval(t *testing.T) {
 	// Assert the expected maintenance receipt, authorization or recovery behavior.
 	if preview["to"] != "k3s" || provider.previews.Load() != 1 {
 		t.Fatal(preview)
+	}
+	// The new route uses the same signed gRPC login while remaining read-only.
+	if err := api.Request(ctx, "GET", "/v1/controller/migration/preparation?backupDir=/backup/preparation", nil, &preview); err != nil {
+		t.Fatal(err)
+	}
+	// Preparation inspection cannot submit an update or runtime migration.
+	if provider.previews.Load() != 2 || provider.starts.Load() != 0 {
+		t.Fatal("preparation crossed the mutation boundary")
 	}
 	exerciseMaintenanceApproval(t, api, provider)
 	// New protected work is rejected while the detached job reserves the controller.

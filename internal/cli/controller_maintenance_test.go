@@ -38,7 +38,10 @@ func (r *maintenanceRequester) Request(_ context.Context, method, path string, b
 		if r.old {
 			return model.Err("NOT_FOUND", "Endpoint not found")
 		}
-		value = map[string]bool{"updates": true, "migrationPreview": true}
+		value = map[string]bool{"updates": true, "migrationPreview": true, "migrationPreparation": true}
+	// Preparation inspection has no apply route or remote host effects.
+	case strings.HasPrefix(path, "/v1/controller/migration/preparation?"):
+		value = map[string]any{"disableSwap": true, "quarantineK3s": true, "errors": []string{"external cluster active"}}
 	// Exercise this independent maintenance outcome with the same retained request.
 	case path == "/v1/controller/update/plan":
 		plan := model.ControllerUpdatePlan{ID: strings.Repeat("a", 32), Fingerprint: "exact", Version: "v1.2.3", Runtime: "docker"}
@@ -82,7 +85,7 @@ func runMaintenanceCLI(t *testing.T, r *maintenanceRequester, args ...string) (s
 // TestControllerMaintenanceCLIReadOnly verifies previews never submit a privileged update request.
 func TestControllerMaintenanceCLIReadOnly(t *testing.T) {
 	// Check each maintenance case without sharing its accepted execution state.
-	for _, args := range [][]string{{"update", "--dry-run"}, {"migrate", "plan", "--to", "k3s", "--backup-dir", "/var/backups/hostlier/new"}} {
+	for _, args := range [][]string{{"update", "--dry-run"}, {"migrate", "plan", "--to", "k3s", "--backup-dir", "/var/backups/hostlier/new"}, {"migrate", "prepare", "--backup-dir", "/var/backups/hostlier/preparation"}} {
 		r := &maintenanceRequester{}
 		output, err := runMaintenanceCLI(t, r, args...)
 		// Assert the expected maintenance receipt, authorization or recovery behavior.
