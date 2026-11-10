@@ -59,6 +59,12 @@ func (c *Controller) cleanupOnce(cleaner artifactCleaner) {
 	c.mu.Lock()
 	keep := c.protectedArtifacts()
 	result, err := store.Sweep(c.opts.Now(), keep)
+	// An active download may have an old directory mtime while streaming one large layer.
+	if c.registryPulls == 0 {
+		preparations, preparationErr := store.SweepPreparations(c.opts.Now())
+		result.Files += preparations.Files
+		err = errors.Join(err, preparationErr)
+	}
 	uploads, uploadErr := c.packageUploads().Sweep(c.opts.Now())
 	result.Files += uploads.Files
 	result.Bytes += uploads.Bytes

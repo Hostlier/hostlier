@@ -70,6 +70,10 @@ func inspectPackageVersions(ctx context.Context, p *Plan) {
 // inspectInstallationRecord loads prior ownership and rejects backend migration.
 func inspectInstallationRecord(ctx context.Context, p *Plan) {
 	o := p.Options
+	// Preserve failure before advancing to the next external-effect boundary.
+	if _, err := os.Lstat(filepath.Join(o.StateDir, "migration-active")); !os.IsNotExist(err) {
+		p.Errors = append(p.Errors, "Runtime migration is active; use hostlier-controller migrate status/rollback before init or update.")
+	}
 
 	// Load prior ownership only from an existing installation record.
 	if data, e := os.ReadFile(filepath.Join(o.StateDir, "installation.json")); e == nil {
@@ -80,6 +84,7 @@ func inspectInstallationRecord(ctx context.Context, p *Plan) {
 		} else {
 			p.Snapshot.Installation = &installation
 			inspectProxyMigration(p, installation)
+			// Reject incompatible state before continuing the protected migration step.
 			if installation.MasterFingerprint != "" && installation.MasterFingerprint != o.MasterFingerprint {
 				p.Errors = append(p.Errors, "This controller is already pinned to a different master.")
 			}

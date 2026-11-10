@@ -8,12 +8,12 @@ type Source struct {
 	Container *ContainerSource `json:"container,omitempty" yaml:"container,omitempty"`
 }
 
-// ContainerSource selects an explicit local Docker build or a prebuilt portable image archive.
+// ContainerSource selects a local Docker build context or a prebuilt portable archive.
 type ContainerSource struct {
 	Dockerfile   string `json:"dockerfile,omitempty" yaml:"dockerfile,omitempty"`
 	Context      string `json:"context,omitempty" yaml:"context,omitempty"`
 	Archive      string `json:"archive,omitempty" yaml:"archive,omitempty"`
-	Architecture string `json:"architecture" yaml:"architecture,omitempty"`
+	Architecture string `json:"architecture,omitempty" yaml:"architecture,omitempty"`
 }
 
 // Endpoint makes publication explicit and records authorized private callers.

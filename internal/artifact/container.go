@@ -9,8 +9,8 @@ import (
 
 // ContainerImage validates a single portable Docker archive without extracting or executing it.
 func ContainerImage(path, architecture string) (v1.Image, error) {
-	// Explicit supported platforms prevent accidental laptop-native images.
-	if architecture != "amd64" && architecture != "arm64" {
+	// Offline validation may omit the target; preparation checks the discovered controller platform.
+	if architecture != "" && architecture != "amd64" && architecture != "arm64" {
 		return nil, model.Err("ARTIFACT_PLATFORM", "Container architecture must be amd64 or arm64")
 	}
 	// Pipes and devices cannot enter the local preparation path.
@@ -24,10 +24,15 @@ func ContainerImage(path, architecture string) (v1.Image, error) {
 	}
 	config, err := image.ConfigFile()
 	// The manifest's actual platform must match the authored target.
-	if err != nil || config.OS != "linux" || config.Architecture != architecture {
+	if err != nil || config.OS != "linux" || !containerArchitectureMatches(config.Architecture, architecture) {
 		return nil, model.Err("ARTIFACT_PLATFORM", "Container archive does not match the requested Linux architecture")
 	}
 	return image, nil
+}
+
+// containerArchitectureMatches allows offline archive checks before receiver discovery.
+func containerArchitectureMatches(actual, target string) bool {
+	return (actual == "amd64" || actual == "arm64") && (target == "" || actual == target)
 }
 
 // validateContainerArchive requires a nonempty regular file before metadata is parsed.

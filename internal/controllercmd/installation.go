@@ -40,6 +40,7 @@ func runInit(ctx context.Context, args []string, in io.Reader, out, errOut io.Wr
 	dry := flags.Bool("dry-run", false, "preview without changing the server")
 	yes := flags.Bool("yes", false, "approve the displayed server installation")
 	jsonOutput := flags.Bool("json", false, "emit machine-readable JSON")
+	approvedFingerprint := flags.String("approved-fingerprint", "", "require this exact previously reviewed installation fingerprint")
 	// Help is successful and never opens server state.
 	if err := flags.Parse(args); err != nil {
 		// Standard flag help is a read-only success.
@@ -71,8 +72,8 @@ func runInit(ctx context.Context, args []string, in io.Reader, out, errOut io.Wr
 		return err
 	}
 	progress("inspection", "completed")
-	// The operator must receive the exact plan before approving any work.
-	if err = writeInstallationPlan(out, plan, *jsonOutput); err != nil {
+	// The operator receives the exact plan only after its retained review is validated.
+	if err = writeReviewedInstallationPlan(out, plan, *jsonOutput, *approvedFingerprint); err != nil {
 		return err
 	}
 	// Preview never requires a CLI sibling or privileges to mutate the host.
@@ -80,6 +81,15 @@ func runInit(ctx context.Context, args []string, in io.Reader, out, errOut io.Wr
 		return nil
 	}
 	return installReviewed(ctx, plan, executable, *yes, *jsonOutput, in, out, errOut, deps)
+}
+
+// writeReviewedInstallationPlan rejects stale detached approvals before displaying or applying changes.
+func writeReviewedInstallationPlan(out io.Writer, plan installer.Plan, jsonOutput bool, approvedFingerprint string) error {
+	// A retained fingerprint cannot authorize changed host or installation conditions.
+	if approvedFingerprint != "" && approvedFingerprint != plan.Fingerprint {
+		return model.Err("STALE_PLAN", "Server conditions changed; preview and approve a new controller update")
+	}
+	return writeInstallationPlan(out, plan, jsonOutput)
 }
 
 // writeInstallationPlan puts blockers first while retaining the full plan for --json callers.

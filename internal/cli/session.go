@@ -60,6 +60,7 @@ type session struct {
 	cwd, serverTarget, masterProfile string
 	remote                           Requester
 	projectSecrets                   []projectSecret
+	containerArchitecture            string
 	// format is human, json or toon for this invocation's results.
 	format string
 }

@@ -27,6 +27,13 @@ func Export(dir, output, config string) error {
 	return exportWithConfiguration(dir, output, config, "/etc/hostlier", "/var/lib/caddy")
 }
 
+// VerifyExport reads a metadata backup through the same manifest, path, length
+// and key-material validation used by restore, without creating a destination.
+func VerifyExport(input string) error {
+	_, err := readBundle(input)
+	return err
+}
+
 // exportWithConfiguration keeps system roots explicit for isolated recovery verification.
 func exportWithConfiguration(dir, output, config, settingsRoot, caddyRoot string) error {
 	// Stable absolute operational paths preserve all runtime and engine ownership hashes.
@@ -44,6 +51,13 @@ func exportWithConfiguration(dir, output, config, settingsRoot, caddyRoot string
 		return err
 	}
 	defer s.Close()
+	return s.Export(output, config, settingsRoot, caddyRoot)
+}
+
+// Export snapshots metadata while the caller retains exclusive controller ownership.
+// Migration uses this boundary so backup and cutover cannot race another writer.
+func (s *Store) Export(output, config, settingsRoot, caddyRoot string) error {
+	dir := s.dir
 	scratch, err := os.MkdirTemp("", "hostlier-backup-")
 	// Propagate failures before publishing recovery state.
 	if err != nil {
@@ -339,7 +353,14 @@ func rejectSymlinkAncestors(path string) error {
 
 // excludedRecoveryFile omits writer artifacts and obsolete snapshots.
 func excludedRecoveryFile(name string) bool {
-	return name == "controller.lock" || name == "state.json" || strings.HasPrefix(name, "state.db")
+	return name == "controller.lock" || name == "state.json" || strings.HasPrefix(name, "state.db") || controllerUpdatePayload(name)
+}
+
+// controllerUpdatePayload preserves small receipts without bundling root executables,
+// transient installer logs, or complete collector images into metadata backups.
+func controllerUpdatePayload(name string) bool {
+	parts := strings.Split(filepath.ToSlash(name), "/")
+	return len(parts) > 1 && parts[0] == "controller-updates" && (len(parts) != 3 || parts[2] != "record.json")
 }
 
 // durableRecoveryFile flushes a restored file before the staging directory is published.
@@ -389,7 +410,8 @@ func collectRecoveryStateFile(files map[string][]byte, dir, path string, entry o
 	return err
 }
 
-// transientRecoveryDirectory identifies reconstructible data and unapproved executable staging.
+// transientRecoveryDirectory excludes staging, observations, and application volume
+// data. Migration volumes have independent cold archives; they are not metadata.
 func transientRecoveryDirectory(dir, path string) bool {
-	return path == filepath.Join(dir, "recovery-config") || path == filepath.Join(dir, "observations") || path == filepath.Join(dir, "collector-image") || path == filepath.Join(dir, "package-uploads")
+	return path == filepath.Join(dir, "recovery-config") || path == filepath.Join(dir, "observations") || path == filepath.Join(dir, "collector-image") || path == filepath.Join(dir, "package-uploads") || path == filepath.Join(dir, "migration-data")
 }

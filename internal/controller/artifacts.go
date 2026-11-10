@@ -5,6 +5,7 @@ import (
 	"hostlier/internal/model"
 	"net/http"
 	"path/filepath"
+	"runtime"
 )
 
 // artifactChunkRequest carries one bounded resumable upload segment.
@@ -17,9 +18,17 @@ type artifactChunkRequest struct {
 // apiArtifacts accepts authenticated staging without starting or publishing workloads.
 func (c *Controller) apiArtifacts(r *http.Request, p []string, actor string) (any, error) {
 	store := artifact.Store{Root: filepath.Join(c.opts.StateDir, "artifacts")}
+	// Container platforms describe the Linux guest target even for a development controller on macOS.
+	if matches(r, p, "GET", 3, "platform") {
+		return map[string]string{"os": "linux", "arch": runtime.GOARCH}, nil
+	}
 	// Scoped clients cannot append to another client's staging or committed archives.
 	if c.scopedClient(actor) {
 		store.UploadOwner = actor
+	}
+	// Server-first registry preparation is inert and uses only the server's credential source.
+	if matches(r, p, "POST", 3, "pull") {
+		return c.pullRegistryArtifact(r, store, actor)
 	}
 	// Negotiation returns metadata only, scoped to the authenticated uploader.
 	if matches(r, p, "POST", 3, "status") {

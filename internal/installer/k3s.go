@@ -73,26 +73,16 @@ done
 
 // installK3s installs approved cluster assets and verifies local readiness.
 func installK3s(ctx context.Context, p Plan, run func(string, ...string) error) error {
-	// Replace only a missing binary or the previously owned pinned patch release.
-	upgrade := p.Snapshot.K3s.Installed && p.Snapshot.K3s.Version != K3sVersion
-	if !p.Snapshot.K3s.Installed || upgrade {
-		// Do not install services until the pinned binary is verified.
-		if err := downloadK3s(ctx); err != nil {
-			return err
-		}
+	upgrade, err := prepareK3sBinary(ctx, p)
+	// A verified binary must precede all owned service changes.
+	if err != nil {
+		return err
 	}
-	// Commit every approved cluster asset before starting systemd services.
-	for path, data := range k3sAssets() {
-		mode := os.FileMode(0644)
-		// Restrict executable helper scripts to the privileged owner.
-		if filepath.Ext(path) == ".sh" {
-			mode = 0700
-		}
-		// An uncommitted unit or guard script must stop installation.
-		if e := atomic(path, []byte(data), mode); e != nil {
-			return e
-		}
+	// Node security flags are retained when regenerating cluster assets.
+	if err := writeK3sAssets(p); err != nil {
+		return err
 	}
+
 	// Reload new unit definitions before enabling them.
 	if e := run("systemctl", "daemon-reload"); e != nil {
 		return e
@@ -103,6 +93,7 @@ func installK3s(ctx context.Context, p Plan, run func(string, ...string) error) 
 	}
 	// A running service keeps executing its old binary until an approved patch upgrade restarts it.
 	if upgrade {
+		// Treat absent optional state explicitly rather than inferring authority.
 		if e := run("systemctl", "restart", "k3s.service"); e != nil {
 			return e
 		}
@@ -112,6 +103,41 @@ func installK3s(ctx context.Context, p Plan, run func(string, ...string) error) 
 		return e
 	}
 	return waitK3sReady(ctx)
+}
+
+// prepareK3sBinary replaces only a missing binary or a previously owned patch release.
+func prepareK3sBinary(ctx context.Context, p Plan) (bool, error) {
+	upgrade := p.Snapshot.K3s.Installed && p.Snapshot.K3s.Version != K3sVersion
+	// The immutable download is checksum-verified before use.
+	if !p.Snapshot.K3s.Installed || upgrade {
+		// Preserve failure before advancing to the next external-effect boundary.
+		if err := downloadK3s(ctx); err != nil {
+			return false, err
+		}
+	}
+	return upgrade, nil
+}
+
+// writeK3sAssets publishes the reviewed cluster unit and private firewall guard.
+func writeK3sAssets(p Plan) error {
+	// Every asset must be durable before any service is started.
+	for path, body := range k3sAssets() {
+		data, err := expectedMigrationAsset(p.StateDir, path, body)
+		// Invalid node policy cannot produce an unenforced service definition.
+		if err != nil {
+			return err
+		}
+		mode := os.FileMode(0644)
+		// Helpers remain executable only by the privileged owner.
+		if filepath.Ext(path) == ".sh" {
+			mode = 0700
+		}
+		// Never activate a partial unit or script.
+		if err := atomic(path, []byte(data), mode); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // downloadK3s fetches only the pinned binary and verifies its checksum before activation.

@@ -28,6 +28,8 @@ Usage: hostlier-controller run [options]
        hostlier-controller connect MASTER_URL_OR_PROFILE
        hostlier-controller init --domain DOMAIN [--master-fingerprint SHA256] [--dry-run] [--yes] [--runtime auto|docker|k3s] [--proxy MODE]
        hostlier-controller update [--dry-run] [--yes] [--state-dir DIR] [--config FILE]
+       hostlier-controller migrate plan|apply --to k3s --backup-dir NEW_DIRECTORY [--yes]
+       hostlier-controller migrate status|rollback [--state-dir DIR] [--yes]
        hostlier-controller bootstrap --url HTTPS_ORIGIN --request ID [--socket PATH --name OWNER]
        hostlier-controller agent run --controller-fingerprint SHA256 [options]
        hostlier-controller backup --output FILE [--state-dir DIR --config FILE]
@@ -45,16 +47,11 @@ func Run(ctx context.Context, args []string, in io.Reader, out, errOut io.Writer
 		_, err := fmt.Fprint(out, helpText)
 		return err
 	}
-	// Server setup belongs to this executable and has its own installation-only flags.
-	if args[0] == "connect" {
-		return connectMaster(ctx, args[1:], in, out, errOut)
+	// Setup commands have their own flags and never enter daemon parsing.
+	if handled, err := runLocalSetup(ctx, args, in, out, errOut); handled {
+		return err
 	}
-	if args[0] == "init" {
-		return runInit(ctx, args[1:], in, out, errOut, initDependencies{})
-	}
-	if args[0] == "update" {
-		return runUpdate(ctx, args[1:], in, out, errOut)
-	}
+
 	s := &session{ctx: ctx, out: out, flags: map[string]string{}, command: "controller", sub: args[0]}
 	rest := args[1:]
 	// Fleet hosts use the same runtime with a pinned controller identity.
@@ -76,6 +73,31 @@ func Run(ctx context.Context, args []string, in io.Reader, out, errOut io.Writer
 		return err
 	}
 	return s.execute()
+}
+
+// runLocalSetup routes installation and migration without adding daemon flags.
+func runLocalSetup(ctx context.Context, args []string, in io.Reader, out, errOut io.Writer) (bool, error) {
+	// Select only representations explicitly supported by the migration contract.
+	switch args[0] {
+	// Keep this alternative within the validated operation or archive contract.
+	case "connect":
+		return true, connectMaster(ctx, args[1:], in, out, errOut)
+	// Keep this alternative within the validated operation or archive contract.
+	case "init":
+		return true, runInit(ctx, args[1:], in, out, errOut, initDependencies{})
+	// Keep this alternative within the validated operation or archive contract.
+	case "update":
+		return true, runUpdate(ctx, args[1:], in, out, errOut)
+	// Only the root-owned detached unit invokes this fixed-purpose execution entry point.
+	case "maintenance-run":
+		return true, runControllerUpdate(ctx, args[1:], errOut)
+	// Keep this alternative within the validated operation or archive contract.
+	case "migrate":
+		return true, runMigration(ctx, args[1:], in, out, errOut, migrationDependencies{})
+	// Keep this alternative within the validated operation or archive contract.
+	default:
+		return false, nil
+	}
 }
 
 // execute keeps the daemon command surface limited to locally owned operations.

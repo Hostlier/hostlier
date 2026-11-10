@@ -245,7 +245,7 @@ func (d *dockerDeployment) candidateLegacy() error {
 		l := r.labels(d.spec.Name)
 		l["io.hostlier.operation"] = d.operation
 		var created struct{ ID string }
-		e = r.api(ctx, "POST", "/containers/create?platform=linux%2F"+goruntime.GOARCH+"&name="+d.name, map[string]any{"Image": d.spec.Image, "Labels": l, "Env": envList, "ExposedPorts": map[string]any{d.portKey: map[string]any{}}, "NetworkingConfig": map[string]any{"EndpointsConfig": endpoints}, "HostConfig": host}, &created, nil)
+		e = r.api(ctx, "POST", "/containers/create?platform=linux%2F"+goruntime.GOARCH+"&name="+d.name, map[string]any{"Image": artifact.RuntimeImage(d.spec.Image), "Labels": l, "Env": envList, "ExposedPorts": map[string]any{d.portKey: map[string]any{}}, "NetworkingConfig": map[string]any{"EndpointsConfig": endpoints}, "HostConfig": host}, &created, nil)
 		// Do not inspect or start a candidate whose creation failed.
 		if e != nil {
 			return e

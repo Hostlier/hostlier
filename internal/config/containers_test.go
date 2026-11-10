@@ -26,6 +26,13 @@ func TestContainerSourcePreflight(t *testing.T) {
 	if err := ValidateInput(p); err != nil {
 		t.Fatal(err)
 	}
+	// Local builds and archives defer platform selection until controller discovery.
+	for _, source := range []model.ContainerSource{{Context: "."}, {Archive: "app.tar"}} {
+		p.Source.Container = &source
+		if err := ValidateInput(p); err != nil { // Offline structural validation does not require a controller.
+			t.Fatal(err)
+		}
+	}
 }
 
 // TestContainerSourceRejectsAmbiguity fails before a Docker build can execute.
@@ -35,6 +42,7 @@ func TestContainerSourceRejectsAmbiguity(t *testing.T) {
 		{Container: &model.ContainerSource{Context: ".", Archive: "a.tar", Architecture: "amd64"}},
 		{Image: "nginx:latest", Container: &model.ContainerSource{Context: ".", Architecture: "amd64"}},
 		{Container: &model.ContainerSource{Context: ".", Architecture: "unknown"}},
+		{Container: &model.ContainerSource{Archive: "a.tar", Dockerfile: "Dockerfile", Architecture: "amd64"}},
 	}
 	// Each source must fail independently without relying on filesystem checks.
 	for _, source := range cases {
@@ -44,5 +52,36 @@ func TestContainerSourceRejectsAmbiguity(t *testing.T) {
 		if err := ValidateInput(p); err == nil {
 			t.Fatalf("accepted %+v", source)
 		}
+	}
+}
+
+// TestRemovedContainerImageField rejects obsolete declarations instead of ignoring them beside a local input.
+func TestRemovedContainerImageField(t *testing.T) {
+	for _, document := range []string{ // JSON and YAML both use the same strict project decoder.
+		"version: 2\nsource:\n  container:\n    image: ghcr.io/team/private:latest\n",
+		"version: 2\nsource:\n  container:\n    context: .\n    image: ghcr.io/team/private:latest\n",
+		`{"version":2,"source":{"container":{"archive":"image.tar","image":"ghcr.io/team/private:latest"}}}`,
+	} {
+		var project model.Project
+		if err := DecodeYAML([]byte(document), &project); err == nil { // Removing the field must fail before any runtime source selection.
+			t.Fatal("removed source.container.image field accepted")
+		}
+	}
+}
+
+// TestRegistryImageValidation keeps download request validation separate from the local container schema.
+func TestRegistryImageValidation(t *testing.T) {
+	for _, image := range []string{"ghcr.io/team/private:latest", "nginx:alpine"} { // Both explicit registries and Docker Hub shorthand remain valid.
+		if err := ValidateRegistryImage(image, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, image := range []string{"", "invalid image", "https://alice:secret@ghcr.io/team/private:latest"} { // Invalid or credential-bearing references never reach registry lookup.
+		if err := ValidateRegistryImage(image, "amd64"); err == nil {
+			t.Fatal("invalid registry reference accepted")
+		}
+	}
+	if err := ValidateRegistryImage("nginx:alpine", "unknown"); err == nil { // Download requests cannot bypass supported target checks.
+		t.Fatal("unsupported architecture accepted")
 	}
 }

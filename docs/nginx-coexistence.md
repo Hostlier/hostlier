@@ -41,7 +41,7 @@ Do not edit the generated include manually. Hostlier detects changes to its reco
 - An explicit `default_server` for existing wildcard IPv4 listeners on ports 80 and 443. This prevents a new include from changing the existing default site. Preflight reports incompatible layouts without changing them.
 - Certbot already installed at `/usr/bin/certbot`. Hostlier does not install or upgrade existing Nginx/Certbot packages; missing selected runtimes and their dependencies are installed separately.
 
-New Hostlier virtual hosts use IPv4 ports 80 and 443. DNS, public reachability, IPv6 routing, Nginx upgrades and host firewall policy remain operator responsibilities. Changing an already initialized Hostlier installation from another proxy or runtime remains unsupported.
+New Hostlier virtual hosts use IPv4 ports 80 and 443. DNS, public reachability, IPv6 routing, Nginx upgrades and host firewall policy remain operator responsibilities. Init does not change an already initialized proxy or runtime. Standalone Docker installations can use the separate [k3s migration workflow](runtime-migration.md) with backups and rollback.
 
 ## Certificates
 

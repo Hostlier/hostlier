@@ -23,6 +23,16 @@ type K3s struct {
 
 // newK3s constructs an explicitly configured local cluster adapter.
 func newK3s(o Options) (model.Runtime, error) {
+	// Require the declared confinement contract before accepting this workload.
+	if o.K3sSecurity == nil {
+		var err error
+		o.K3sSecurity, err = loadK3sSecurity(o.StateDir)
+		// Preserve failure before advancing to the next external-effect boundary.
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	copy := o
 	copy.Type = "docker"
 	adapter, e := New(copy)
@@ -206,8 +216,8 @@ func (k *K3s) InspectImage(ctx context.Context, image string) (model.ImageInfo, 
 // app isolation. No NodePorts, host ports, or privileged workload options exist.
 func (k *K3s) K3sManifests(spec model.Project, dc model.DeployContext) ([]map[string]any, error) {
 	// Manifest-only callers must not silently lose declared kernel confinement either.
-	if hasContainerSecurity(spec) {
-		return nil, model.Err("UNSUPPORTED_SECURITY", "This container security contract currently requires Docker")
+	if err := k.validateK3sSecurity(spec); err != nil {
+		return nil, err
 	}
 	ns := k.namespace(spec.Name)
 	version := "app-" + shortHash(dc.OperationID)
@@ -261,7 +271,7 @@ func (k *K3s) K3sManifests(spec model.Project, dc model.DeployContext) ([]map[st
 	}
 	_ = ns
 	manifests = append([]map[string]any{policy}, manifests...)
-	return k.extendGroupManifests(spec, dc, manifests)
+	return k.finishSecureManifests(spec, dc, manifests)
 }
 
 // service applies the owned private service and returns its allocated upstream address.

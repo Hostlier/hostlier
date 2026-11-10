@@ -117,7 +117,7 @@ func (c *Controller) scopedRouteAllowed(r *http.Request, g *Authorization) bool 
 
 // scopedArtifactRoute admits bounded staging, receipt status and verified publication, never archive reads or deletion.
 func scopedArtifactRoute(r *http.Request, p []string) bool {
-	return p[1] == "artifacts" && r.Method == "POST" && (len(p) == 3 && (p[2] == "commit" || p[2] == "status") || len(p) == 4 && p[3] == "chunks")
+	return p[1] == "artifacts" && (r.Method == "GET" && len(p) == 3 && p[2] == "platform" || r.Method == "POST" && (len(p) == 3 && (p[2] == "commit" || p[2] == "status" || p[2] == "pull") || len(p) == 4 && p[3] == "chunks"))
 }
 
 // scopedApprovalRoute permits execution only of the original device's retained request.

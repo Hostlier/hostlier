@@ -23,6 +23,7 @@ type browserFixture struct {
 	key     *ecdsa.PrivateKey
 	id      []byte
 	counter uint32
+	rpID    string // Invalid-RP proofs must not mutate the live controller's hostname.
 }
 
 // browserJSON sends same-origin browser ceremony requests through the production HTTP handler.
@@ -44,7 +45,12 @@ func browserJSON(t *testing.T, c *Controller, path string, body any, ceremony st
 
 // authenticatorData builds signed RP, presence, verification and counter fields.
 func (f *browserFixture) authenticatorData(flags byte) []byte {
-	hash := sha256.Sum256([]byte(f.c.state.Hostname))
+	hostname := f.c.state.Hostname
+	// A software authenticator can sign the wrong RP without changing controller state.
+	if f.rpID != "" {
+		hostname = f.rpID
+	}
+	hash := sha256.Sum256([]byte(hostname))
 	data := append([]byte{}, hash[:]...)
 	data = append(data, flags)
 	return binary.BigEndian.AppendUint32(data, f.counter)
@@ -169,13 +175,11 @@ func TestBrowserPasskeyRejectsUnverifiedOriginAndRevocation(t *testing.T) {
 				v.Session.Challenge = "wrong"
 				f.c.access.Ceremonies[id] = v
 			}
-			originalHost := f.c.state.Hostname
 			// Fail the test when the expected security invariant is violated.
 			if mode == "wrong-rp" {
-				f.c.state.Hostname = "evil.example"
+				f.rpID = "evil.example"
 			}
 			proof := f.assertion(t, id, flags, origin)
-			f.c.state.Hostname = originalHost
 			// Fail the test when the expected security invariant is violated.
 			if mode == "wrong-challenge" {
 				v := f.c.access.Ceremonies[id]
@@ -194,6 +198,9 @@ func TestBrowserPasskeyRejectsUnverifiedOriginAndRevocation(t *testing.T) {
 
 // mutateBrowserAuthority simulates authority changes between challenge and assertion.
 func mutateBrowserAuthority(f *browserFixture, mode string) {
+	// Background persistence reads authority and generation under this same lock.
+	f.c.mu.Lock()
+	defer f.c.mu.Unlock()
 	// Revocation must invalidate all assertions for the affected credential.
 	if mode == "revoked" {
 		// Exercise this protocol boundary independently.

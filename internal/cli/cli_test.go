@@ -69,11 +69,11 @@ func (f *fakeClient) Request(_ context.Context, method, path string, body, resul
 	return nil
 }
 
-// project supports project in the integration fixture.
+// project uses prepared image content so approval and secret tests remain independent of registry preparation.
 func project(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	data := "version: 1\nname: fixture\nimage: nginx@sha256:" + strings.Repeat("a", 64) + "\nport: 80\nroute: fixture.example.com\n"
+	data := "version: 1\nname: fixture\nimage: hostlier.local/artifacts@sha256:" + strings.Repeat("a", 64) + "\nport: 80\nroute: fixture.example.com\n"
 	// Fail immediately if fixture setup or execution fails.
 	if e := os.WriteFile(filepath.Join(dir, ".hostlier"), []byte(data), 0600); e != nil {
 		t.Fatal(e)

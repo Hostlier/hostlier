@@ -7,7 +7,7 @@ import (
 // prepareArtifacts packages and uploads compiled inputs before requesting a deployment plan.
 func (s *session) prepareArtifacts(p model.Project) (model.Project, error) {
 	var err error
-	// Container builds and prebuilt archives share the verified upload path.
+	// Registry images, local builds and archives share controller-first verified preparation.
 	p, err = s.prepareContainerSource(p)
 	// Never continue with another source after container preparation fails.
 	if err != nil {

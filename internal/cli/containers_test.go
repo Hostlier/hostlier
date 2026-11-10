@@ -50,6 +50,10 @@ type containerPlanFixture struct {
 func (f *containerPlanFixture) reply(c call) (any, error) {
 	// Every request must use the existing authenticated API surface.
 	switch {
+	case c.path == "/v1/artifacts/platform": // Container images target the receiver, never the laptop CPU.
+		return map[string]string{"os": "linux", "arch": "amd64"}, nil
+	case c.path == "/v1/artifacts/pull": // Registry fixtures default to the explicitly tested local fallback path.
+		return nil, model.Err("IMAGE_PULL", "Registry unavailable from fixture controller")
 	case c.path == "/v1/artifacts/status": // Status retains independent content verification.
 		return f.store.Status(c.body.(artifact.Result))
 	case strings.HasSuffix(c.path, "/chunks"): // The real store verifies exact offset/replay rules.
@@ -154,7 +158,7 @@ func TestContainerDockerBuildPlan(t *testing.T) {
 func (f *containerPlanFixture) plan(c call) (any, error) {
 	p := c.body.(map[string]any)["spec"].(model.Project)
 	// Generic containers cannot inherit an agent launcher or expose laptop paths to the controller.
-	if p.Source.Container != nil {
+	if p.Source != nil && p.Source.Container != nil {
 		return nil, fmt.Errorf("unprepared container")
 	}
 	// A plan is admitted only when the uploaded content can be independently read back.
@@ -164,7 +168,7 @@ func (f *containerPlanFixture) plan(c call) (any, error) {
 	// Sidecars omit a top-level identity but must still be prepared and independently retained.
 	for _, member := range p.Sidecars {
 		// No local sidecar source may leak into the immutable controller plan.
-		if member.Source.Container != nil || member.Image == "" {
+		if member.Source != nil && member.Source.Container != nil || member.Image == "" {
 			return nil, fmt.Errorf("unprepared sidecar")
 		}
 		// Identical primary and sidecar images may share one verified transport.

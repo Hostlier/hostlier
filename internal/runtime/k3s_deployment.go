@@ -270,12 +270,19 @@ func (k *K3s) drain(ctx context.Context, namespace, version string) error {
 // validateInputs rejects unresolved images and unsupported security contracts before scheduling.
 func (d *k3sDeployment) validateInputs() error {
 	// Node-local security policy distribution is not implemented by the cluster adapter.
+	if err := d.runtime.validateK3sSecurity(d.spec); err != nil {
+		return err
+	}
+	// Require the declared confinement contract before accepting this workload.
 	if hasContainerSecurity(d.spec) {
-		return model.Err("UNSUPPORTED_SECURITY", "This container security contract currently requires Docker")
+		// Preserve failure before advancing to the next external-effect boundary.
+		if err := d.runtime.verifyK3sSecurity(d.ctx); err != nil {
+			return err
+		}
 	}
 	// The operation identity also defines the immutable manifest revision.
 	if !digestPattern.MatchString(d.spec.Image) || d.dc.OperationID == "" {
 		return model.Err("UNPINNED_IMAGE", "Deployment requires approved immutable image and operation ID")
 	}
-	return nil
+	return d.runtime.prepareK3sSeccomp(d.spec)
 }

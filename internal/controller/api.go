@@ -23,26 +23,14 @@ func (c *Controller) handle(w http.ResponseWriter, r *http.Request, local bool) 
 
 // handleManagement is shared by the HTTP SDK and the CLI command RPC.
 func (c *Controller) handleManagement(w http.ResponseWriter, r *http.Request, local bool) {
-	// Collector writes and history queries never persist or lock deployment state during I/O.
-	if c.serveActivity(w, r, local) {
-		return
-	}
-	if c.serveTelemetry(w, r, local) {
-		return
-	}
-	// Shared observations use an independent cache and never persist read traffic.
-	if c.serveStatusObservation(w, r, local) {
-		return
-	}
-	// Stream progress outside the ordinary request-wide state lock.
-	if operationEventsRoute(r) {
-		c.serveOperationEvents(w, r, local)
+	// Independent reads perform their own authentication without retaining the aggregate lock.
+	if c.serveUnserializedRead(w, r, local) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	// Extend the response deadline for bounded backup and export work.
-	if strings.HasSuffix(r.URL.Path, "/backups") || strings.HasSuffix(r.URL.Path, "/export") || strings.HasSuffix(r.URL.Path, "/execute") || (r.Method == http.MethodPost && r.URL.Path == "/v1/tunnels") {
+	if strings.HasSuffix(r.URL.Path, "/backups") || strings.HasSuffix(r.URL.Path, "/export") || strings.HasSuffix(r.URL.Path, "/execute") || (r.Method == http.MethodPost && (r.URL.Path == "/v1/tunnels" || strings.HasSuffix(r.URL.Path, "/artifacts/pull"))) {
 		http.NewResponseController(w).SetWriteDeadline(time.Now().Add(c.opts.LongOperationTimeout))
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, apiBodyLimit(r, local))
@@ -233,7 +221,16 @@ func (c *Controller) routeAPI(r *http.Request, p []string, actor string) (any, e
 	return result, err
 }
 
+// routeAPIAction admits maintenance reservations before selecting the protected operation.
 func (c *Controller) routeAPIAction(r *http.Request, p []string, actor string) (any, error) {
+	// Accepted workload mutations cannot race the detached controller installer.
+	if err := c.checkMaintenanceMutation(r); err != nil {
+		return nil, err
+	}
+	// Controller maintenance retains the same authenticated and approved dispatcher.
+	if p[1] == "controller" {
+		return c.apiControllerMaintenance(r, p, actor)
+	}
 	// Apply this check before granting authority or advancing protocol state.
 	if p[1] == "authorizations" {
 		return c.apiAuthorizations(r, p, actor)

@@ -1,5 +1,6 @@
 version: 2
 name: sidecar-demo
+# Registry references use source.image; Hostlier detects the controller's architecture.
 source:
   image: busybox:1.37.0
 workload: service

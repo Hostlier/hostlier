@@ -1,5 +1,40 @@
 # Installed Go binary tests
 
+## Runtime migration and rollback
+
+Use a fresh, disposable VM named exactly hostlier-runtime-migration-test, with the
+checked-in Ubuntu 24.04 Lima configuration and no host mounts. Build current Linux
+arm64 hostlier-controller, hostlier, and these test binaries:
+
+    CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o /tmp/migration-fixture ./test/e2e/migration-fixture
+    CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go test -c -o /tmp/hostlier-migration.test ./internal/migration
+
+Copy those four binaries (named hostlier-controller, hostlier, migration-fixture,
+hostlier-migration.test), collector/dist/collector-image/, and migration_vm.py to
+the guest's /tmp. Install Docker, Nginx, Certbot, OpenSSL and Python 3 in the guest.
+Inside this VM only:
+
+    sudo python3 /tmp/migration_vm.py setup
+    sudo python3 /tmp/migration_vm.py exercise
+    sudo python3 /tmp/migration_vm.py crash
+    sudo /tmp/hostlier-migration.test -test.v
+
+The harness refuses any hostname except the specified fixture (including Lima's
+lima- prefix). Setup installs a stateful nonroot service and storage sidecar with
+independent volumes, pinned environment/file secrets, read-only roots, dropped
+capabilities, no privilege escalation, PID/no-swap declarations, and bounded
+sticky scratch space. Private HTTPS remains verified through the guest's test CA.
+
+Exercise checks a read-only preview, Docker → k3s cutover, both volumes and live
+security settings, controller restart, and rollback preserving newer k3s writes.
+It uses the reviewed retry path after a prior complete rollback. Crash kills a
+new migration during restore, verifies the systemd startup guard, and checks
+journal-driven rollback. The Go filesystem gate uses GNU tar to verify sparse
+data, permissions, hard links and symlinks.
+
+Stop and remove only the disposable VM created for this test when finished.
+No production server or public certificate issuer participates.
+
 ## Fleet handoff on fresh VMs
 
 From the Hostlier module on an Apple Silicon Mac, run:
@@ -164,3 +199,28 @@ They observe real scheduler `Insufficient cpu`, retain source HTTPS and PVC data
 restore historical scaled limits/replicas, and hard-exit separate processes after
 actual candidate creation and Service cutover to prove fresh-runtime intent recovery.
 Run sequentially on small VMs; leave installed fixture and Redis namespaces intact.
+
+### Detached controller update runner
+
+Run `controller_update_vm.py` only in a fresh disposable Ubuntu VM with no
+`hostlier.service` or `/var/lib/hostlier` installation. Copy the current Linux
+`hostlier-controller` executable to `/tmp/hostlier-controller`, then copy the
+script and run it as root. It creates a harmless placeholder controller service
+and staged installer fixtures, then exercises the real production detached
+runner through systemd timer/service units. Both success and installer failure
+must restart the API service, preserve a truthful durable receipt and reject
+terminal-job replay. This gate tests service isolation and recovery; official
+release download/checksum tests and signed gRPC approval tests run in the Go
+suite. It does not install packages, Docker, k3s or a production release.
+
+For example, using a newly created `hostlier-controller-maintenance-test` VM:
+
+```sh
+GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o /tmp/hostlier-controller ./cmd/hostlier-controller
+limactl copy /tmp/hostlier-controller hostlier-controller-maintenance-test:/tmp/hostlier-controller
+limactl copy test/e2e/controller_update_vm.py hostlier-controller-maintenance-test:/tmp/controller_update_vm.py
+limactl shell hostlier-controller-maintenance-test sudo python3 /tmp/controller_update_vm.py
+```
+
+Remove the disposable VM after collecting the two terminal receipts. The fixture
+never accepts a production server address or login.

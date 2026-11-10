@@ -1,6 +1,7 @@
 package model
 
-// ContainerSecurity declares a confined nonroot Docker workload with reviewed syscall policy.
+// ContainerSecurity declares a confined nonroot workload with reviewed syscall policy.
+// Kubernetes additionally requires a verified managed node security policy.
 type ContainerSecurity struct {
 	NoSwap                 bool                  `json:"noSwap" yaml:"noSwap"`
 	RunAsUser              uint32                `json:"runAsUser" yaml:"runAsUser"`

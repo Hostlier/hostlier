@@ -118,7 +118,10 @@ func TestScopedArtifactResumeStatus(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertEmptyUploadStatus(t, status)
+	// Revocation must serialize with the controller's background state snapshots.
+	c.mu.Lock()
 	c.state.Authorizations[grantID].Revoked = true
+	c.mu.Unlock()
 	// Reusing content and resuming uploads both require current authorization.
 	if err := api.Request(ctx, "POST", "/v1/artifacts/status", receipt, &status); err == nil {
 		t.Fatal("revoked device obtained status")

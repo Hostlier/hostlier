@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"github.com/google/go-containerregistry/pkg/name"
 	"hostlier/internal/model"
 	"path"
 	"strings"
@@ -64,7 +65,7 @@ func placeholderContainer(p *model.Project) error {
 
 // ValidateContainerSource checks portable input selection without requiring a complete parent workload.
 func ValidateContainerSource(a model.ContainerSource) error {
-	// Exactly one explicit input prevents an accidental build when an archive was intended.
+	// Ambiguous inputs must fail before credential lookup or local build execution.
 	if (a.Context == "") == (a.Archive == "") {
 		return invalid("Container requires exactly one of context or archive")
 	}
@@ -72,8 +73,26 @@ func ValidateContainerSource(a model.ContainerSource) error {
 	if !validContainerDockerfile(a) {
 		return invalid("Dockerfile must be relative to its container context")
 	}
-	// Container architecture is never inferred from the laptop's CPU.
-	if a.Architecture != "amd64" && a.Architecture != "arm64" {
+	return validateContainerArchitecture(a.Architecture)
+}
+
+// ValidateRegistryImage checks an inert registry request independently of local container source syntax.
+func ValidateRegistryImage(image, architecture string) error {
+	// An empty reference cannot select the registry library's implicit defaults.
+	if image == "" {
+		return invalid("Image must be a valid registry image reference")
+	}
+	// Registry coordinates never contain URL userinfo or a transport scheme.
+	if _, err := name.ParseReference(image); err != nil {
+		return invalid("Image must be a valid registry image reference")
+	}
+	return validateContainerArchitecture(architecture)
+}
+
+// validateContainerArchitecture defers omitted targets to the receiving controller, never the laptop CPU.
+func validateContainerArchitecture(architecture string) error {
+	// Explicit constraints must name a supported Linux image architecture.
+	if architecture != "" && architecture != "amd64" && architecture != "arm64" {
 		return invalid("Container architecture must be amd64 or arm64")
 	}
 	return nil

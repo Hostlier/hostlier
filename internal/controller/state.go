@@ -4,6 +4,7 @@ import "hostlier/internal/fleet"
 
 // State contains the versioned durable controller data protected by the state lock.
 type State struct {
+	ControllerUpdateID    string                           `json:"controllerUpdateId,omitempty"`
 	MasterFingerprint     *string                          `json:"masterFingerprint,omitempty"`
 	TunnelGatewayDomain   string                           `json:"tunnelGatewayDomain,omitempty"`
 	TunnelGatewayURL      string                           `json:"tunnelGatewayUrl,omitempty"`

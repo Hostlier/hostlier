@@ -13,6 +13,7 @@ import (
 	"hostlier/internal/controller"
 	"hostlier/internal/emailauth"
 	"hostlier/internal/fleet"
+	"hostlier/internal/migration"
 	"hostlier/internal/model"
 	"hostlier/internal/recovery"
 	"hostlier/internal/resourceclient"
@@ -24,6 +25,10 @@ func (s *session) runController() error {
 	var e error
 
 	stateDir := defaultValue(s.flags["state-dir"], "/var/lib/hostlier")
+	// Preserve failure before advancing to the next external-effect boundary.
+	if err := migration.CheckStartup(stateDir); err != nil {
+		return err
+	}
 	configPath := defaultValue(s.flags["config"], "/etc/hostlier/config.yaml")
 	cfg, e := config.ReadServer(configPath)
 	// Stop when server configuration cannot be loaded and validated.
@@ -57,7 +62,7 @@ func (s *session) runController() error {
 	if e != nil {
 		return e
 	}
-	server, e := controller.New(controller.Options{TunnelDomain: s.flags["tunnel-domain"], TunnelURL: s.flags["tunnel-url"], ManagedCollector: true, CollectorEndpoint: os.Getenv("HOSTLIER_COLLECTOR_URL"), CollectorCAFile: os.Getenv("HOSTLIER_CA_FILE"), RecoveryDestinations: destinations, EmailEnrollment: emailEnrollment, StateDir: stateDir, Config: cfg, ConfigPath: configPath, Runtime: adapter, Hostname: hostname, LogPath: logPath, ResourceManager: manager})
+	server, e := controller.New(controller.Options{Maintenance: newServerMaintenance(stateDir, configPath), TunnelDomain: s.flags["tunnel-domain"], TunnelURL: s.flags["tunnel-url"], ManagedCollector: true, CollectorEndpoint: os.Getenv("HOSTLIER_COLLECTOR_URL"), CollectorCAFile: os.Getenv("HOSTLIER_CA_FILE"), RecoveryDestinations: destinations, EmailEnrollment: emailEnrollment, StateDir: stateDir, Config: cfg, ConfigPath: configPath, Runtime: adapter, Hostname: hostname, LogPath: logPath, ResourceManager: manager})
 	// Stop startup when the selected runtime or controller cannot be constructed.
 	if e != nil {
 		return e

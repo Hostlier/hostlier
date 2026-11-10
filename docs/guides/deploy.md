@@ -8,7 +8,10 @@ For a first deployment from the Hostlier source directory, the included nginx ex
 hostlier deploy --file examples/hello.hostlier --route hello.apps.example.com
 ```
 
-For private images, [log in with Docker on the server](private-images.md) first.
+Both top-level `image` and version 2 `source.image` discover the receiving
+controller's architecture, try downloading there first, and automatically fall
+back to your local Docker login and upload if its registry access fails.
+See [private images](private-images.md) for registry setup.
 
 Create `.hostlier` in the current project directory:
 
@@ -62,7 +65,7 @@ Deployments and protected changes show a concrete plan and require approval. A m
 
 `--file FILE` selects a project file, `--server NAME` selects a profile, and `--route ADDRESS` replaces the complete route for one plan/deployment. Routes support a hostname and optional path, such as `example.com/analytics`. Prefixes are preserved unless `proxy.stripPrefix: true` is set. Domain membership, reserved controller addresses, and overlapping routes are enforced by the controller.
 
-Images resolve to immutable digests during planning. Updates with persistent volumes use a stop/start strategy to prevent simultaneous writers. Ordinary Docker volume sizes are requested capacity, not enforced quotas. Stop keeps the workload's containers, images, and data while its capacity remains stopped across restarts. Delete removes all containers owned by that application, including stopped older revisions, and releases image cache entries once no active app or plan needs them. Normal deletion retains data and hides the app from the default `hostlier list`; use `hostlier list --all` to inspect retained records. Explicit purge removes owned data.
+Images resolve to immutable digests during preparation and planning. Updates with persistent volumes use a stop/start strategy to prevent simultaneous writers. Ordinary Docker volume sizes are requested capacity, not enforced quotas. Stop keeps the workload's containers, images, and data while its capacity remains stopped across restarts. Delete removes all containers owned by that application, including stopped older revisions, and releases image cache entries once no active app or plan needs them. Normal deletion retains data and hides the app from the default `hostlier list`; use `hostlier list --all` to inspect retained records. Explicit purge removes owned data.
 
 Roll back to the revision immediately before the active deployment with `hostlier rollback NAME`, or choose a retained revision with `hostlier rollback NAME --revision ID`. Use `hostlier status NAME --json` to inspect revision history. The default requires a previous revision and pins its ID before plan review, including if a stale plan needs renewed approval. Each successful rollback creates a new revision, so another default rollback returns to the deployment that preceded it. Rollback restores application configuration and pinned secrets; it does not undo database or persistent-volume data changes.
 

@@ -18,6 +18,8 @@ import (
 
 // Options configures runtime dependencies, persistence and bounded controller deadlines.
 type Options struct {
+	// Maintenance is provided only by the installed server executable.
+	Maintenance model.ControllerMaintenance
 	// TunnelDomain reserves a dedicated wildcard suffix; TunnelURL is the public HTTPS controller origin.
 	TunnelDomain, TunnelURL            string
 	ManagedCollector                   bool
@@ -76,6 +78,7 @@ type Controller struct {
 	rates                  map[string]rate
 	closed                 bool
 	streams                int
+	registryPulls          int
 	eventPersistedSequence uint64
 	operationChange        chan struct{}
 	jobChange              chan struct{}

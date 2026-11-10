@@ -56,6 +56,9 @@ the [controller gRPC route](STREAMING.md) over HTTP/2.
 
 ## Guides
 
+- [Controller updates and migration previews](docs/controller-maintenance.md)
+- [Docker to k3s migration, backups and rollback](docs/runtime-migration.md)
+
 - [Install and connect](docs/guides/install.md)
 - [Deploy and update apps](docs/guides/deploy.md)
 - [Private images](docs/guides/private-images.md)

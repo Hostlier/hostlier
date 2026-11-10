@@ -127,6 +127,10 @@ func (c *Controller) recordHumanRequest(request humanRequest, actor string) (any
 // humanReview publishes exact deployment plans and redacts private fields for other mutations.
 func (c *Controller) humanReview(request humanRequest, actor string) (json.RawMessage, error) {
 	review := map[string]any{"controller": c.state.Hostname, "method": request.Method, "path": request.Path, "requestedBy": actor, "warning": "This authorizes exactly this request. Review availability, credentials and data-retention consequences."}
+	// Controller updates must show the verified retained release, not caller-supplied prose.
+	if request.Path == "/v1/controller/update/apply" {
+		return c.controllerUpdateReview(request, actor, review)
+	}
 	parts := strings.Split(strings.Trim(request.Path, "/"), "/")
 	// Deployment review is bound to the server-retained plan rather than client-provided prose.
 	if len(parts) == 4 && parts[1] == "plans" && parts[3] == "apply" {

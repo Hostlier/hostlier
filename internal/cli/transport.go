@@ -110,6 +110,9 @@ func (s *session) status() error {
 func (s *session) controllerCommand() error {
 	// Select the requested controller administration read.
 	switch s.sub {
+	// Maintenance uses the same saved native gRPC connection as ordinary commands.
+	case "update", "update-status", "migrate":
+		return s.controllerMaintenanceCommand()
 	// Print controller health and operation inventory.
 	case "status":
 		return s.getPrint("/v1/status")

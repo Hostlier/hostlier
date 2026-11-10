@@ -163,7 +163,7 @@ func (s *approvalSimulation) respond(method, path string, body, result any) (boo
 // The PTY test's independent signer watches proposal receipts at a test-only
 // gRPC proxy. Both hops use the real protocol; all authorization, enrollment
 // and streaming run against the unmodified controller.
-func withFixtureGRPCHuman(t *testing.T, c *controller.Controller) http.Handler {
+func withFixtureGRPCHuman(t *testing.T, c *controller.Controller, observers ...func(*pb.CommandRequest)) http.Handler {
 	t.Helper()
 	handler := c.Handler()
 	signer := withFixtureHuman(t, c, handler).(*fixtureHuman)
@@ -172,12 +172,19 @@ func withFixtureGRPCHuman(t *testing.T, c *controller.Controller) http.Handler {
 	upstream.StartTLS()
 	t.Cleanup(upstream.Close)
 	api := controlrpcconnect.NewControllerClient(upstream.Client(), upstream.URL, connect.WithGRPC())
+	// Forward real commands and sign only the exact pending approval returned by the controller.
 	proxy := connect.NewUnaryHandler(controlrpcconnect.ControllerCommandProcedure, func(ctx context.Context, in *connect.Request[pb.CommandRequest]) (*connect.Response[pb.CommandReply], error) {
+		// Live integration tests observe coordinates and byte counts without replacing controller behavior.
+		for _, observe := range observers {
+			observe(in.Msg)
+		}
 		call := connect.NewRequest(in.Msg)
 		call.Header().Set("Authorization", in.Header().Get("Authorization"))
 		result, err := api.Command(ctx, call)
+		// All nonapproval traffic and controller failures retain the original production response.
 		if err == nil && in.Msg.Route == "/v1/approvals" && in.Msg.Method == "POST" {
 			var approval map[string]any
+			// Only a controller-retained pending request can receive a test authenticator decision.
 			if json.Unmarshal(result.Msg.JsonBody, &approval) == nil && approval["status"] == "pending" {
 				signer.mu.Lock()
 				signed := signer.decide(approval, in.Header())
@@ -187,7 +194,9 @@ func withFixtureGRPCHuman(t *testing.T, c *controller.Controller) http.Handler {
 		}
 		return result, err
 	})
+	// Streaming and every other procedure continue directly to the controller's unmodified handler.
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Observe only the unary command procedure; stream transport remains untouched.
 		if r.URL.Path == controlrpcconnect.ControllerCommandProcedure {
 			proxy.ServeHTTP(w, r)
 			return

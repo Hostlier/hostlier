@@ -32,3 +32,8 @@ In the terminal, use `hostlier --help` for the command index, `hostlier app --he
 - [Dashboard](docs/observatory.md).
 
 [Validation and current limits](VALIDATION.md) · [Architecture](IMPLEMENTATION.md) · [Back to the README](README.md)
+
+## Controller maintenance and runtime migration
+
+- [Update controllers and preview migrations with your saved login](docs/controller-maintenance.md).
+- [Migrate Docker applications and data to k3s with backup and rollback](docs/runtime-migration.md).

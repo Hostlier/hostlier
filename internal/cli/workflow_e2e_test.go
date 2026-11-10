@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"hostlier/internal/artifact"
 	"hostlier/internal/client"
 	"hostlier/internal/controller"
 	"hostlier/internal/model"
@@ -72,7 +73,11 @@ type workflowEngine struct {
 func (*workflowEngine) Name() string { return "docker" }
 
 // InspectImage returns a stable immutable image for review.
-func (*workflowEngine) InspectImage(context.Context, string) (model.ImageInfo, error) {
+func (*workflowEngine) InspectImage(_ context.Context, image string) (model.ImageInfo, error) {
+	// Registry preparation already verified this controller-owned content; retain its exact identity.
+	if artifact.IsImage(image) {
+		return model.ImageInfo{Digest: image}, nil
+	}
 	return model.ImageInfo{Digest: "example/app@sha256:" + strings.Repeat("a", 64)}, nil
 }
 

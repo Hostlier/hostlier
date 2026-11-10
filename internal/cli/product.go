@@ -59,6 +59,11 @@ func (s *session) product() error {
 	if err != nil {
 		return err
 	}
+	spec, err = s.prepareDeploymentProject(spec)
+	// Product applications use the same registry preparation and local fallback as ordinary deployments.
+	if err != nil {
+		return err
+	}
 	spec, source, err := s.deploymentRoute(spec)
 	// Route validation occurs before controller planning and approval.
 	if err != nil {

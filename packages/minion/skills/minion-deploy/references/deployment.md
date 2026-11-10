@@ -55,7 +55,7 @@ hostlier deploy --file build-1.0.0/artifact/.hostlier --server production
 hostlier status my-minion --server production
 ```
 
-Use `buildx --push` only when publication/deployment is authorized. An ordinary native Docker build is sufficient when it matches the target platform. For a private image, confirm the controller has authorized pull access; laptop registry login alone does not guarantee server access.
+Use `buildx --push` only when publication/deployment is authorized. An ordinary native Docker build is sufficient when it matches the target platform. For a registry image, set top-level `image` or version 2 `source.image`. Hostlier discovers the controller's architecture and attempts to download there first. If registry access fails, the CLI downloads with local Docker credentials and uploads the verified image. Credentials remain on the machine that uses them.
 
 Hostlier lowers `fused` into the Engine URL, app ID and `FUSED_APP_TOKEN` secret binding and rejects competing producers. Leave that translation to Hostlier. For the native consent path, Hostlier stores the approved execution token. For a legacy existing-app build, an authorized administrator can provision its existing execution-token secret through the hidden prompt. Runtime execution credentials must remain separate from the app-scoped deployment-management grant; never inject management authority into the Minion container.
 

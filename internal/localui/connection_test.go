@@ -90,8 +90,8 @@ func TestConnectionLinksAndSavesCLIProfile(t *testing.T) {
 	local, manager, fixture, upstream := linkFixture(t)
 	body, _ := json.Marshal(map[string]string{"name": "vm", "url": upstream.URL})
 	response := uiCall(local, "POST", "/api/connection/link", string(body), local.token, local.origin)
-	// Browser-visible state contains only the approval locator, not enrollment or controller secrets.
-	if response.Code != 200 || strings.Contains(response.Body.String(), "private") {
+	// Detect exact fixture secrets without mistaking macOS's /private/tmp CLI paths for leaked credentials.
+	if response.Code != 200 || pairingResponseContainsSecret(response.Body.String()) {
 		t.Fatal(response.Code, response.Body.String())
 	}
 	state, _ := manager.State()
@@ -111,6 +111,18 @@ func TestConnectionLinksAndSavesCLIProfile(t *testing.T) {
 		t.Fatal(response.Code, response.Body.String())
 	}
 	assertSavedLink(t, local, manager, fixture, upstream.URL)
+}
+
+// pairingResponseContainsSecret distinguishes enrollment credentials from ordinary public CLI filesystem metadata.
+func pairingResponseContainsSecret(body string) bool {
+	// All private values emitted by the upstream fixture must remain outside browser-visible state.
+	for _, secret := range []string{"request-private-id", "polling-private-secret", "controller-private-token"} {
+		// Check complete fixture values rather than a word that may appear in a legitimate local path.
+		if strings.Contains(body, secret) {
+			return true
+		}
+	}
+	return false
 }
 
 // TestConnectionRejectsForeignRequestsAndConflictingApprovals prevents local API authority confusion.

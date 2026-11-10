@@ -2,13 +2,30 @@
 
 [All guides](../../GUIDE.md)
 
-Log in to the registry **on your server**, then deploy normally. Hostlier reuses
-that account's existing Docker login for resolving image tags and pulling images.
+Both top-level `image: ghcr.io/your-org/your-app:latest` and version 2
+`source.image` use **automatic local fallback**.
+Hostlier detects the controller's architecture and asks the controller to download
+first. If its registry access fails, the CLI downloads with your laptop's Docker
+credentials and uploads automatically; a server registry login is optional.
+See [deploy local containers from the CLI](container-deploy.md) for the full
+configuration. Use `image` or `source.image` for registry references;
+`source.container` accepts only local build contexts and image archives.
+The rest of this guide explains the server registry login used by the first
+download attempt. A server login is optional when the CLI can download using
+your laptop's credentials instead.
+
+For local fallback, log in on your laptop with
+`docker login ghcr.io --username YOUR_GITHUB_USERNAME`, or
+`docker login --username YOUR_DOCKER_USERNAME` for Docker Hub.
+
+To let the controller download directly, log in to the registry **on your server**.
+Hostlier reuses that account's existing Docker login for resolving image tags and
+pulling images.
 It does not run `docker login`, copy credentials into its state, or rewrite your
 Docker configuration. This works on both Docker and k3s servers; see
 [k3s servers](#k3s-servers) for how credentials reach Kubernetes.
 
-## Log in once
+## Optional server login
 
 As the server account you use to install Hostlier:
 
@@ -35,27 +52,42 @@ the Docker daemon.
 On your connected laptop, use the private image in `.hostlier`:
 
 ```yaml
+version: 1
+name: prototype
+image: ghcr.io/your-org/your-app:latest
+port: 3000
+route: prototype.apps.example.com
+```
+
+For a version 2 project, use `source.image`:
+
+```yaml
 version: 2
 name: prototype
 source:
-  image: ghcr.io/example/prototype:latest
+  image: ghcr.io/your-org/your-app:latest
 endpoint:
   exposure: public
   port: 3000
-  route: https://prototype.apps.example.com
+  route: prototype.apps.example.com
 ```
+
+The [basic image example](../../examples/hello.hostlier) and
+[sidecar example](../../examples/sidecars.hostlier) demonstrate both forms.
 
 ```sh
-hostlier app deploy
+hostlier deploy
 ```
 
-Normal deployment approval still applies. A login on your laptop alone does not
-authenticate the server.
+Normal deployment approval still applies. If the controller's registry access
+fails, the CLI uses your laptop's Docker login and uploads the image. Credentials
+remain on the machine that uses them.
 
 ## Existing installations
 
-Install the updated release and rerun `init` as the server user whose Docker login
-you want Hostlier to use. This records the login owner and updates Hostlier's own
+To configure a server login, install the updated release and rerun `init` as the
+server user whose Docker login you want Hostlier to use. This records the login
+owner and updates Hostlier's own
 systemd service. Subsequent retries preserve that choice, even when run as root.
 Restarting an old service unit alone does not grant it access to home directories.
 
@@ -70,8 +102,12 @@ selected account's `~/.docker/config.json`. It never searches other users' login
 
 ## k3s servers
 
-Kubernetes pulls images itself, so on a k3s server Hostlier hands it the login
-through a pull secret:
+CLI deployments prepare registry images as verified artifacts, then import them
+into containerd on the k3s server. These artifacts do not require a registry pull
+secret or a Docker daemon.
+
+Direct controller API deployments that still reference remote images let
+Kubernetes pull them. Hostlier supplies the server login through a pull secret:
 
 - On each approved deployment, Hostlier reads the same server-account Docker
   login and writes a `kubernetes.io/dockerconfigjson` Secret named
@@ -94,8 +130,9 @@ containerd and never use the Secret.
 
 Existing k3s installations: install the updated release and rerun `init` as the
 server user whose login you want to use (see below). Until then, the controller
-can't read that user's home directory. Private images then fail at tag resolution,
-or at rollout for digest-pinned images, and Hostlier rolls the deployment back.
+can't read that user's home directory. CLI deployments can use local credential
+fallback. Direct remote-image deployments can fail at tag resolution or rollout;
+Hostlier rolls a failed rollout back.
 
 ## Credential helpers
 
@@ -137,7 +174,13 @@ isolation. k3s unit tests cover pull-secret contents (only the deployed
 registries), Docker Hub key mapping, manifest ordering and Pod references,
 anonymous images, and rejection of token-only or malformed logins. The k3s path
 has not yet been run against a real cluster pulling from a private registry. A disposable Linux container also verified that helpers drop from root
-to the selected user's UID. Race tests cover the affected Go packages. No real
-Docker Hub or GHCR account was used in these tests.
+to the selected user's UID. Race tests cover the affected Go packages.
+
+A [live private GHCR test](../private-registry-validation.md) also verified a real
+anonymous controller failure followed by automatic CLI download with local
+credentials, a complete chunk upload, Docker deployment, matching image config
+digests, and HTTP 200 through Caddy. It used Linux ARM64 containers on Docker
+Desktop; installed-service, public HTTPS and private k3s rollout coverage remain
+separate checks. The linked report includes the opt-in command for repeating it.
 
 Docker protocol reference: [Docker login and credential helpers](https://docs.docker.com/reference/cli/docker/login/).

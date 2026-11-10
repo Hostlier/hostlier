@@ -1,5 +1,6 @@
 version: 1
 name: hello
+# Registry images use the controller first, then local credentials and upload if needed.
 image: nginx:1.28-alpine
 port: 80
 health:

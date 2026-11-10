@@ -162,8 +162,15 @@ func decodeResponse(response *http.Response, path string, result any) error {
 // requestTransport grants backup creation its bounded operation timeout.
 func (c *Client) requestTransport(method, path string) *http.Client {
 	httpClient := c.HTTP
+	// Root inspection and verified release staging may outlive an ordinary read.
+	route, _, _ := strings.Cut(path, "?")
+	if method == "GET" && (route == "/v1/controller/update/plan" || route == "/v1/controller/migration/plan") {
+		bounded := *c.HTTP
+		bounded.Timeout = 15 * time.Minute
+		return &bounded
+	}
 	// Give resource backup creation a bounded maintenance deadline without changing other requests.
-	if method == "POST" && ((strings.HasPrefix(path, "/v1/resources/") && strings.HasSuffix(path, "/backups")) || (strings.HasPrefix(path, "/v1/approvals/") && strings.HasSuffix(path, "/execute"))) {
+	if method == "POST" && ((strings.HasPrefix(path, "/v1/resources/") && strings.HasSuffix(path, "/backups")) || (strings.HasPrefix(path, "/v1/approvals/") && strings.HasSuffix(path, "/execute")) || strings.HasSuffix(path, "/artifacts/pull")) {
 		bounded := *c.HTTP
 		bounded.Timeout = 10 * time.Minute
 		httpClient = &bounded

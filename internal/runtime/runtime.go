@@ -27,6 +27,8 @@ import (
 
 // Options configures private runtime transport, ownership paths and readiness limits.
 type Options struct {
+	// K3sSecurity is loaded from the protected node policy on managed installations.
+	K3sSecurity *K3sSecurityPolicy
 	// DockerLogin is the read-only server-account login source selected during installation.
 	DockerLogin *dockerlogin.Source
 	// CollectorTrustDirectory optionally relocates the local Docker registry trust root for embedding and tests.

@@ -25,6 +25,21 @@ hostlier plan --file .hostlier --server production
 hostlier deploy --file .hostlier --server production
 ```
 
+For private images, top-level `image` and version 2
+`source.image: ghcr.io/acme/storefront:1.0` use the same automatic preparation.
+The CLI detects the selected
+controller or fleet host's architecture and asks it to stage the image first.
+Registry connectivity or login failure triggers an automatic download with local
+Docker credentials/helpers and a verified upload. Log in locally for fallback
+with `docker login ghcr.io --username USERNAME`. No Docker daemon is needed for
+registry downloads. Architecture is optional for all container sources; an
+explicit value must match the controller. Controller access, platform and storage
+errors stop preparation. Prepared artifact references skip registry preparation
+in both schema versions. `source.container` selects exactly one of `context`
+(local Docker build) or `archive` (prebuilt `docker save` file). Use `image` or
+`source.image` for registry references.
+`hostlier validate` remains offline for registry download sources.
+
 The controller enforces exact human approval or a hardware-signed deployment window. In a valid window, named stateless apps can deploy without another prompt. In a sandbox window (an app prefix such as `try-`), new prefixed apps can be created up to the window's app cap, and the agent may stop or delete them with `hostlier stop NAME` / `hostlier delete NAME`; see the authorize skill. Otherwise the CLI prints a request code and waits; give the human the printed `hostlier approve CODE --key FILE` command to run in their own trusted terminal. Do not invent confirmation or use `--yes`. Resume an interrupted wait with `hostlier approval REQUEST_ID --watch`; do not create duplicate deployments.
 
 Progress and reconnects are automatic. `--detach` returns after acceptance; an operation ID is not proof of success. Use `hostlier operation ID --watch` to reattach, then check `hostlier status storefront` and relevant logs. Project package hooks require an installed adapter.

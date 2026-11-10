@@ -137,6 +137,10 @@ func (c *Controller) startRecoveryScheduler() {
 func (c *Controller) scheduleBackups() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	// A retained controller update temporarily reserves background backup admission.
+	if err := c.controllerMaintenanceAvailable(""); err != nil {
+		return
+	}
 	// Advance only after the required recovery invariant holds.
 	if c.closed {
 		return

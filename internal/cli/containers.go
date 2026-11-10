@@ -11,24 +11,62 @@ import (
 	"strings"
 )
 
-// prepareContainerSource lowers local container inputs to the existing immutable image contract.
+// prepareContainerSource stages registry images and local container inputs as verified immutable content.
 func (s *session) prepareContainerSource(p model.Project) (model.Project, error) {
-	// Other workload sources retain their own packaging flow.
-	if p.Source == nil || p.Source.Container == nil {
-		return p, nil
+	source, prepare, err := containerPreparationInput(p)
+	// Already prepared artifacts and unrelated sources never trigger registry access.
+	if err != nil || !prepare {
+		return p, err
 	}
-	// Sidecars may omit parent identity, but source ambiguity must always fail before a build.
-	if p.Source.Image != "" || p.Image != "" {
-		return p, model.Err("INVALID_CONFIG", "Select only one workload source")
-	}
-	receipt, err := s.prepareContainer(s.containerPaths(*p.Source.Container))
+	receipt, err := s.prepareImageSource(source)
 	// Existing authorization, resumability and integrity checks govern container uploads too.
 	if err != nil {
 		return p, err
 	}
 	p.Image = receipt.Image
-	p.Source = &model.Source{Image: receipt.Image}
+	// Version-one documents keep their top-level shape; source is a version-two field.
+	if p.Source != nil {
+		p.Source = &model.Source{Image: receipt.Image}
+	}
 	return p, nil
+}
+
+// containerPreparationInput gives every authored registry image the controller-first preparation flow.
+func containerPreparationInput(p model.Project) (model.Source, bool, error) {
+	// Legacy deployments use the same image preparation without adopting version-two source fields.
+	if p.Source == nil {
+		return registryPreparationInput(p.Image)
+	}
+	// Local build and archive declarations remain separate from registry image references.
+	if p.Source.Container != nil {
+		if p.Source.Image != "" || p.Image != "" { // Mixed declarations cannot select a different image implicitly.
+			return model.Source{}, false, model.Err("INVALID_CONFIG", "Select only one workload source")
+		}
+		return *p.Source, true, nil
+	}
+	// Normalization may already have copied the authored source into Image; preserve only matching copies.
+	if p.Image != "" && p.Image != p.Source.Image {
+		return model.Source{}, false, model.Err("INVALID_CONFIG", "Conflicting image and source")
+	}
+	return registryPreparationInput(p.Source.Image)
+}
+
+// registryPreparationInput avoids contacting registries for already verified controller artifacts.
+func registryPreparationInput(image string) (model.Source, bool, error) {
+	// Package outputs, uploaded archives and retained revisions are already available to the controller.
+	if image == "" || artifact.IsImage(image) {
+		return model.Source{}, false, nil
+	}
+	return model.Source{Image: image}, true, nil
+}
+
+// prepareImageSource keeps local build/archive configuration separate from registry preparation requests.
+func (s *session) prepareImageSource(source model.Source) (artifact.Result, error) {
+	// Only explicit local sources require project-relative paths or Docker build tooling.
+	if source.Container != nil {
+		return s.prepareContainer(s.containerPaths(*source.Container))
+	}
+	return s.prepareRegistryImage(source.Image)
 }
 
 // prepareContainer keeps the private build workspace alive until upload or failure completes.
@@ -37,27 +75,48 @@ func (s *session) prepareContainer(a model.ContainerSource) (artifact.Result, er
 	if err := validateContainerInput(a); err != nil {
 		return artifact.Result{}, err
 	}
+	var err error
+	a.Architecture, err = s.resolveContainerArchitecture(a.Architecture)
+	// Receiver discovery and explicit constraints precede builds, credentials and downloads.
+	if err != nil {
+		return artifact.Result{}, err
+	}
 	dir, err := os.MkdirTemp("", "hostlier-container-")
 	// A private temporary workspace prevents collisions with other CLI invocations.
 	if err != nil {
 		return artifact.Result{}, err
 	}
 	defer os.RemoveAll(dir)
-	// A context explicitly authorizes a local Docker build; archives never execute application code.
-	if a.Context != "" {
-		a.Archive = filepath.Join(dir, "docker.tar")
-		// Preserve build errors without uploading an old image as a fallback.
-		if err = s.buildContainer(a); err != nil {
-			return artifact.Result{}, err
-		}
+	path, err := s.prepareContainerArchive(dir, a)
+	// Failed builds or downloads cannot enter archive verification or artifact upload.
+	if err != nil {
+		return artifact.Result{}, err
 	}
+	return s.uploadContainerArchive(dir, path, a.Architecture)
+}
+
+// uploadContainerArchive verifies either local or downloaded bytes before transferring immutable content.
+func (s *session) uploadContainerArchive(dir, path, architecture string) (artifact.Result, error) {
 	fmt.Fprintln(s.errOut, "Preparing verified container image for upload")
-	receipt, err := artifact.PrepareContainer(dir, a.Archive, a.Architecture)
+	receipt, err := artifact.PrepareContainer(dir, path, architecture)
 	// Only verified Linux image content may cross the controller boundary.
 	if err != nil {
 		return artifact.Result{}, err
 	}
 	return s.transferArtifact(receipt)
+}
+
+// prepareContainerArchive builds an explicitly selected local context or selects a prebuilt archive.
+func (s *session) prepareContainerArchive(dir string, a model.ContainerSource) (string, error) {
+	// A context explicitly authorizes a local Docker build; archives never execute application code.
+	if a.Context != "" {
+		a.Archive = filepath.Join(dir, "docker.tar")
+		// Preserve build errors without uploading an old image as a fallback.
+		if err := s.buildContainer(a); err != nil {
+			return "", err
+		}
+	}
+	return a.Archive, nil
 }
 
 // containerPaths resolves all local inputs relative to the selected deployment file.

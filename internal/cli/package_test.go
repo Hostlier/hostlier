@@ -92,7 +92,8 @@ func TestPackagedGoCLIHTTPSAndPTYApproval(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	dir, err := os.MkdirTemp("/tmp", "hostlier-cli-")
+	// Honor the test filesystem so controller artifact reserves use its actual capacity.
+	dir, err := os.MkdirTemp(os.TempDir(), "hostlier-cli-")
 	// Fail immediately if fixture setup or execution fails.
 	if err != nil {
 		t.Fatal(err)

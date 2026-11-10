@@ -13,7 +13,7 @@ sudo ./hostlier-controller init --domain apps.example.com
 
 Initialization detects Docker and Nginx independently. Compatible existing Docker is reused; an existing Nginx installation selects coexistence automatically. Missing Docker is installed, and a host without Nginx uses Caddy by default. Existing apps, configuration and certificate renewal stay operator-managed. The preview explains each choice and all proposed changes before approval; `init --yes` permits explicit noninteractive installation approval. Unsupported or stopped existing services produce a preflight error instead of being replaced.
 
-Use `--runtime k3s` to install k3s instead of Docker, even when Docker is already present. Proxy detection remains independent, so an existing host Nginx can also serve the new k3s workloads. `--proxy caddy`, `--proxy nginx` (fresh standalone Nginx), and `--proxy nginx-existing` remain explicit overrides. Re-running init without flags retains the recorded runtime, proxy and ownership; switching an initialized runtime or proxy is unsupported. See [automatic detection and coexistence](../nginx-coexistence.md) for requirements and certificate reuse. Controller logs are written to `/var/log/hostlier/hostlier.log`; provider firewalls and DNS remain your responsibility.
+Use `--runtime k3s` to install k3s instead of Docker, even when Docker is already present. Proxy detection remains independent, so an existing host Nginx can also serve the new k3s workloads. `--proxy caddy`, `--proxy nginx` (fresh standalone Nginx), and `--proxy nginx-existing` remain explicit overrides. Re-running init without flags retains the recorded runtime, proxy and ownership; init does not switch an initialized runtime or proxy. Use the separate [Docker to k3s migration workflow](../runtime-migration.md) for reviewed application/data migration with backups and rollback. See [automatic detection and coexistence](../nginx-coexistence.md) for requirements and certificate reuse. Controller logs are written to `/var/log/hostlier/hostlier.log`; provider firewalls and DNS remain your responsibility.
 
 The installer places `hostlier-controller` in `/usr/local/bin/` and starts
 `hostlier.service` with `hostlier-controller run`. To use local socket
@@ -102,3 +102,7 @@ sudo hostlier-controller connect https://secondary.example.com
 The old master continues to manage the box until the new master approves enrollment. The box then switches its pinned identity and checks the new master’s connection. If that check fails, the command attempts to restore the previous pin. A successful switch persists across restarts. The old master’s inventory entry remains until its administrator revokes it.
 
 `hostlier server join MASTER` on the box is the equivalent CLI spelling. A saved master profile supplies authentication. For a new URL, the device credential is held in memory for the enrollment. Use `--host ADDRESS` only if the installed hostname is unreachable from the master, or `--name NAME` to resolve a fleet name collision. The explicit `init --master-fingerprint` and `hosts enroll` commands remain available for manual provisioning.
+
+For subsequent updates and read-only migration previews using an existing CLI
+login, see [controller maintenance](../controller-maintenance.md). Older
+controllers require one initial administrator upgrade before these commands work.
