@@ -73,10 +73,59 @@ func dockerSourceIdle(state string) error {
 		return fmt.Errorf("Cannot inspect committed Docker controller state")
 	}
 	// A source runtime transition or accepted update must settle before host preparation.
-	if source.Version != 2 || source.Runtime != "docker" || source.ControllerUpdateID != "" {
+	if source.Version != 2 || source.Runtime != "docker" {
 		return fmt.Errorf("Preparation requires a settled Docker controller without a pending controller update")
 	}
+	// A successful update can retain its reservation ID until the next normal state write.
+	if source.ControllerUpdateID != "" && !completedControllerUpdate(state, source.ControllerUpdateID) {
+		return fmt.Errorf("Wait for the controller update to succeed before preparation; inspect failed or uncertain update receipts")
+	}
 	return nil
+}
+
+// completedControllerUpdate accepts only a private, identity-matched durable success receipt.
+func completedControllerUpdate(state, id string) bool {
+	// The source snapshot may select only a server-generated update identifier.
+	if !regexp.MustCompile(`^[a-f0-9]{32}$`).MatchString(id) {
+		return false
+	}
+	dir := filepath.Join(state, "controller-updates", id)
+	// Receipt ancestry cannot redirect a host reservation lookup.
+	if err := protectedParent(dir); err != nil {
+		return false
+	}
+	path := filepath.Join(dir, "record.json")
+	info, err := os.Lstat(path)
+	// Missing, public, redirected or unexpectedly large records retain the reservation.
+	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 || info.Size() > 2<<20 {
+		return false
+	}
+	raw, err := os.ReadFile(path)
+	// A failed read is not proof that privileged execution finished.
+	if err != nil {
+		return false
+	}
+	return successfulUpdateReceipt(raw, id)
+}
+
+// successfulUpdateReceipt binds completion to the accepted request and original plan/job identity.
+func successfulUpdateReceipt(raw []byte, id string) bool {
+	var receipt struct {
+		Plan struct {
+			ID string `json:"id"`
+		} `json:"plan"`
+		Job struct {
+			ID     string `json:"id"`
+			Status string `json:"status"`
+			Step   string `json:"step"`
+		} `json:"job"`
+		RequestID string `json:"requestId"`
+	}
+	// Corrupt or partially published receipts never release execution ownership.
+	if json.Unmarshal(raw, &receipt) != nil {
+		return false
+	}
+	return receipt.Plan.ID == id && receipt.Job.ID == id && receipt.RequestID != "" && receipt.Job.Status == "succeeded" && receipt.Job.Step == "completed"
 }
 
 // read returns exact bytes without mutating the inspected file.

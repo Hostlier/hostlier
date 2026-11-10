@@ -248,3 +248,31 @@ func TestClusterAssetRejectsSymlinkAncestor(t *testing.T) {
 		t.Fatal("redirected ancestry accepted")
 	}
 }
+
+// TestCompletedControllerUpdateReceipt separates durable success from active or uncertain maintenance.
+func TestCompletedControllerUpdateReceipt(t *testing.T) {
+	id := strings.Repeat("a", 32)
+	state := t.TempDir()
+	dir := filepath.Join(state, "controller-updates", id)
+	// The fixture uses the same protected receipt layout as the real detached runner.
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "record.json")
+	// Only exact accepted success may release a retained controller update ID.
+	for _, status := range []string{"queued", "running", "failed", "interrupted", "succeeded"} {
+		raw := fmt.Sprintf(`{"plan":{"id":%q},"requestId":"accepted","job":{"id":%q,"status":%q,"step":"completed"}}`, id, id, status)
+		// Every case is independently published as a private, complete receipt.
+		if err := os.WriteFile(path, []byte(raw), 0600); err != nil {
+			t.Fatal(err)
+		}
+		// Failed and uncertain execution remain blocked even when the source runtime is Docker.
+		if completedControllerUpdate(state, id) != (status == "succeeded") {
+			t.Fatalf("wrong reservation classification: %s", status)
+		}
+	}
+	// A moved or foreign receipt must never borrow another update's completion.
+	if successfulUpdateReceipt([]byte(`{"plan":{"id":"foreign"},"job":{"status":"succeeded"}}`), id) {
+		t.Fatal("foreign receipt accepted")
+	}
+}
