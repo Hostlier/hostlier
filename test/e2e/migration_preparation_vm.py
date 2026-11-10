@@ -55,6 +55,7 @@ def exercise():
     original_fstab = Path("/etc/fstab").read_bytes()
     fixture_fstab = original_fstab + b"\n/hostlier-preparation-fixture.swap none swap sw,pri=13 0 0\n"
     Path("/etc/fstab").write_bytes(fixture_fstab)
+    original_stat = Path("/etc/fstab").stat()
     run("systemctl", "daemon-reload")
     backup = "/var/backups/hostlier-preparation-fixture-" + str(time.time_ns())
     flags = ("--state-dir", str(state), "--backup-dir", backup, "--disable-swap", "--quarantine-k3s")
@@ -68,6 +69,9 @@ def exercise():
     check(journal["phase"] == "completed", "Preparation did not complete")
     check(len(Path("/proc/swaps").read_text().splitlines()) == 1, "Swap remains active")
     check(swap.exists(), "Swap file was deleted")
+    prepared_stat = Path("/etc/fstab").stat()
+    check((prepared_stat.st_uid, prepared_stat.st_gid, prepared_stat.st_mode) ==
+          (original_stat.st_uid, original_stat.st_gid, original_stat.st_mode), "fstab metadata changed")
     for asset in journal["assets"]:
         check(not Path(asset["path"]).exists() and Path(asset["quarantine"]).exists(), "Missing retained original")
         check(hashlib.sha256(Path(asset["archive"]).read_bytes()).hexdigest() == asset["archiveSha256"], "Backup corruption")

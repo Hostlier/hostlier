@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 )
 
 // RetainedAsset identifies independent backup bytes and the original same-filesystem quarantine.
@@ -443,7 +444,37 @@ func replaceFstab(raw []byte) error {
 	if err != nil || !info.Mode().IsRegular() {
 		return fmt.Errorf("fstab must be a regular file")
 	}
-	return atomicFile("/etc/fstab", raw, info.Mode().Perm())
+	staged, err := os.CreateTemp("/etc", ".hostlier-fstab-")
+	// Private staging must exist before copying root-owned metadata.
+	if err != nil {
+		return err
+	}
+	defer os.Remove(staged.Name())
+	defer staged.Close()
+	// Preserve ownership, mode, ACLs and extended attributes from the existing policy file.
+	if err := copyFstabAttributes(staged.Name()); err != nil {
+		return err
+	}
+	// A partial write must leave the original fstab in place.
+	if _, err := staged.Write(raw); err != nil {
+		return err
+	}
+	// Both copied metadata and complete bytes must be durable before replacement.
+	if err := staged.Sync(); err != nil {
+		return err
+	}
+	// Rename publishes the complete policy atomically.
+	if err := os.Rename(staged.Name(), "/etc/fstab"); err != nil {
+		return err
+	}
+	return syncDirectory("/etc")
+}
+
+// copyFstabAttributes retains the existing host policy's metadata without copying or printing its bytes.
+func copyFstabAttributes(staged string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	return run(ctx, "cp", "--attributes-only", "--preserve=all", "--", "/etc/fstab", staged)
 }
 
 // fileDigest reads every retained archive byte without interpreting archive paths.

@@ -225,3 +225,26 @@ func TestPreparationRejectsApprovalAndPathBypasses(t *testing.T) {
 		t.Fatal("self-referential backup accepted")
 	}
 }
+
+// TestClusterAssetRejectsSymlinkAncestor prevents apparent standard paths redirecting an archive elsewhere.
+func TestClusterAssetRejectsSymlinkAncestor(t *testing.T) {
+	dir := t.TempDir()
+	real := filepath.Join(dir, "real")
+	alias := filepath.Join(dir, "alias")
+	// Create only test-owned source data and an ancestor redirection.
+	if err := os.Mkdir(real, 0700); err != nil {
+		t.Fatal(err)
+	}
+	// Existing regular source bytes do not make their aliased ancestry safe.
+	if err := os.WriteFile(filepath.Join(real, "db"), []byte("retained"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	// Preparation must inspect links rather than following them into another tree.
+	if err := os.Symlink(real, alias); err != nil {
+		t.Fatal(err)
+	}
+	// No archive or quarantine can derive authority through that redirected parent.
+	if _, err := (localHost{}).asset(filepath.Join(alias, "db")); err == nil {
+		t.Fatal("redirected ancestry accepted")
+	}
+}

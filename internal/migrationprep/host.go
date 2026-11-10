@@ -101,6 +101,10 @@ func (localHost) asset(p string) (Asset, error) {
 	if err != nil {
 		return a, err
 	}
+	// A real final object must also have protected, nonsymlinked ancestry.
+	if err := protectedParent(filepath.Dir(p)); err != nil {
+		return a, err
+	}
 	// Only real files and directories belong to the quarantine contract.
 	if !info.IsDir() && !info.Mode().IsRegular() {
 		return a, fmt.Errorf("Unsupported cluster asset type: %s", p)
