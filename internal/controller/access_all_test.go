@@ -92,6 +92,8 @@ func TestAllAccessRevocationStopsPendingExecution(t *testing.T) {
 			defer closeController(t, c)
 			api, actor, id := pairedScopeFixture(t, c, deploymentScope{})
 			approval := scopedProposalFixture(t, &humanFixture{c: c}, api, actor, "new-app", "")
+			// Synchronize fixture mutations with the background activity writer.
+			c.mu.Lock()
 			// Keep generation unchanged to test direct authority revalidation.
 			switch kind {
 			// Explicit grant revocation is immediate.
@@ -104,6 +106,7 @@ func TestAllAccessRevocationStopsPendingExecution(t *testing.T) {
 			case "owner":
 				c.state.HumanRealm = "new-realm"
 			}
+			c.mu.Unlock()
 			var result any
 			// Already approved writes cannot outlive their authorizing identity.
 			if err := api.Request(context.Background(), "POST", "/v1/approvals/"+approval["id"].(string)+"/execute", map[string]any{}, &result); err == nil {
@@ -120,6 +123,9 @@ func TestAllAccessHasNoLifetimeOrUseCeiling(t *testing.T) {
 	c := newTestController(t, t.TempDir(), &recordingRuntime{}, func() time.Time { return now })
 	defer closeController(t, c)
 	_, actor, id := pairedScopeFixture(t, c, deploymentScope{})
+	// Grant mutations and checks share the persistence writer's state lock.
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	g := c.state.Authorizations[id]
 	g.Uses = 1000000
 	now = now.AddDate(20, 0, 0)
