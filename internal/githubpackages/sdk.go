@@ -30,7 +30,7 @@ func InstallSDK(ctx context.Context, directory, commit, token string) error {
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
-	command := exec.CommandContext(ctx, "go", "get", "github.com/"+DefaultRepository+"/sdk/packagekit@"+commit)
+	command := exec.CommandContext(ctx, "go", "get", SDKModule+"/sdk/packagekit@"+commit)
 	command.Dir = directory
 	command.Env = environment
 	// Raw tool diagnostics can contain private repository URLs; return a bounded actionable failure.
@@ -47,7 +47,7 @@ func sdkEnvironment(environment []string, token string) ([]string, error) {
 	if private != "" {
 		private += ","
 	}
-	environment = append(environment, "GOPRIVATE="+private+"github.com/"+DefaultRepository, "GIT_TERMINAL_PROMPT=0")
+	environment = append(environment, "GOPRIVATE="+private+SDKModule, "GIT_TERMINAL_PROMPT=0")
 	return GitEnvironment(environment, token)
 }
 

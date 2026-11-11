@@ -32,7 +32,7 @@ Next: [Install on your server](install.md).
 
 ## Optional package source
 
-The standalone package repository is [Usefused/hostlier-packages](https://github.com/Usefused/hostlier-packages), currently private. It builds without the controller or CLI checkout and includes a package SDK, database/provider adapters, tests, and editable sample workflows. Its README documents `make build`, `make linux`, and the separate Pulumi module.
+The standalone package repository is [Hostlier/hostlier-packages](https://github.com/Hostlier/hostlier-packages), publicly accessible. It builds without the controller or CLI checkout and includes a package SDK, database/provider adapters, tests, and editable sample workflows. Its README documents `make build`, `make linux`, and the separate Pulumi module.
 
 The original package copies in this checkout remain for compatibility with existing build and integration-test paths during migration. Author new package changes in the package repository. Its `examples/` directory contains sample workflows to adapt; it is not a hosted product/template registry.
 
@@ -46,7 +46,7 @@ Run `make build` in the package repository first. This check uses temporary loca
 
 ## Install the package SDK and remote packages
 
-`hostlier sdk install --version TAG_OR_COMMIT --directory GO_PROJECT` adds the standalone Go package-authoring SDK from `Usefused/hostlier-packages` to an existing local Go module. It resolves the ref to a commit before invoking Go. This SDK is distinct from the broader hosting-sdk project.
+`hostlier sdk install --version TAG_OR_COMMIT --directory GO_PROJECT` adds the standalone Go package-authoring SDK from `Hostlier/hostlier-packages` to an existing local Go module. It resolves the ref to a commit before invoking Go. This SDK is distinct from the broader hosting-sdk project.
 
 `hostlier package available` lists names and platforms from the official Git catalog and returns the commit to use for installation. Use `--server production` to filter by server platform. `hostlier package list` shows installed packages.
 
@@ -131,3 +131,5 @@ To produce a standalone CLI archive locally, run `make cli-release`, or explicit
 select a supported target with `./scripts/package-cli.sh linux arm64`.
 
 `--repository GIT_URL` supports provider-independent package discovery and installation through a versioned `hostlier-packages.json` manifest. See [Git package catalogs](../git-package-catalog.md) for the schema, authentication, and immutable version selection.
+
+The package repository moved to the Hostlier organization. Its Go module and SDK imports remain `github.com/Usefused/hostlier-packages` to preserve compatibility with existing consumers and pinned commits. Repository discovery uses `Hostlier/hostlier-packages`.

@@ -157,13 +157,13 @@ func releaseTransport(t *testing.T, metadata, data []byte, manifest string) roun
 		// Only API asset identities determine the downloaded content.
 		switch r.URL.Path {
 		// Return the explicit release tag metadata.
-		case "/repos/Usefused/hostlier-packages/releases/tags/v1.0.0":
+		case "/repos/Hostlier/hostlier-packages/releases/tags/v1.0.0":
 			return response(metadata), nil
 		// Return the selected native executable bytes.
-		case "/repos/Usefused/hostlier-packages/releases/assets/1":
+		case "/repos/Hostlier/hostlier-packages/releases/assets/1":
 			return response(data), nil
 		// Return the older-style checksum manifest.
-		case "/repos/Usefused/hostlier-packages/releases/assets/2":
+		case "/repos/Hostlier/hostlier-packages/releases/assets/2":
 			return response([]byte(manifest)), nil
 		// Unexpected paths indicate an incorrect source selection.
 		default:

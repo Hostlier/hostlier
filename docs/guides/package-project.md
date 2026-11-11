@@ -42,6 +42,27 @@ A project can enroll one primary workload planner or packager and several local 
 
 Contributors can also return `steps` and `workflowBindings`. The CLI calls enrolled contributors in package-name order. Identical named declarations are coalesced, and conflicting definitions fail planning. The resulting workflow uses ordinary step IDs and `needs`. The builder receives contributed output names in the optional `providedBindings` request field. An enrolled controller package contributes a workflow step from its declared config, secrets and output bindings. A single package can both build and contribute.
 
+Contributors may add `sidecars` using the ordinary v2 sidecar schema and `secrets` mapping parent environment names to **stored secret names**. These require a CLI with sidecar contribution support; older CLIs reject the unknown fields. A package does not receive resolved secrets. Parent secret destination names are included in `providedBindings`, alongside URL and workflow binding names. For example:
+
+```json
+{
+  "version": 1,
+  "sidecars": {
+    "browser": {
+      "source": {"image": "registry.example.com/team/browser:1"},
+      "endpoint": {"exposure": "loopback", "port": 9222},
+      "secrets": {"SANDBOX_TOKEN": "browser-token"},
+      "health": {"exec": ["node", "/opt/hostlier-sandbox/health.mjs"]},
+      "required": true
+    }
+  },
+  "bindings": {"BROWSER_URL": "sidecars.browser.url"},
+  "secrets": {"BROWSER_TOKEN": "browser-token"}
+}
+```
+
+Composition rejects conflicting sidecars and secret references, including conflicts with the authored project. The combined project still passes ordinary validation: sidecars cannot publish routes, nest deployments, or reuse another component's declared port. Their images, scoped secrets, security policies and health probes participate in the existing deployment approval, artifact preparation, rollback and lifecycle. A sidecar shares its parent's network namespace; it is part of the same trusted application group, not a separate network sandbox. See [browser and computer sidecars](sandbox-sidecars.md) for the supplied packages.
+
 Local package planning proposes the deployment spec. Deployment plans again using the current source, packages it, and uses the controller’s ordinary deployment review. The controller approval covers the resolved image and controller workflow. See the [local package discovery rules](package-init.md) and the [controller deploy hook](package-deploy.md).
 
 ## Executable contract

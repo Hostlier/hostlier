@@ -52,6 +52,8 @@ type ProjectPackageResponse struct {
 // Controller-side effects are represented by ordinary workflow steps.
 type ProjectContribution struct {
 	Version          int                          `json:"version"`
+	Sidecars         map[string]ProjectSidecar    `json:"sidecars,omitempty"`
+	Secrets          map[string]string            `json:"secrets,omitempty"`
 	Dependencies     map[string]ProjectDependency `json:"dependencies,omitempty"`
 	Bindings         map[string]string            `json:"bindings,omitempty"`
 	Steps            []workflow.Step              `json:"steps,omitempty"`
@@ -61,3 +63,7 @@ type ProjectContribution struct {
 
 // ProjectDependency requests a named native Hostlier resource.
 type ProjectDependency = model.Dependency
+
+// ProjectSidecar uses the ordinary workload contract, including scoped secrets and health probes.
+// Composition validates it as a sidecar; it cannot create a nested or public deployment.
+type ProjectSidecar = model.Project

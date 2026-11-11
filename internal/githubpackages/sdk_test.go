@@ -35,7 +35,7 @@ printf '%s\n' "$HOSTLIER_SDK_GITHUB_TOKEN" > token
 	private, _ := os.ReadFile(filepath.Join(root, "private"))
 	token, _ := os.ReadFile(filepath.Join(root, "token"))
 	// Tokens never appear in command arguments and existing private module settings survive.
-	if string(args) != "get\ngithub.com/"+DefaultRepository+"/sdk/packagekit@"+sha+"\n" || !strings.Contains(string(private), "example.test/private,github.com/"+DefaultRepository) || string(token) != "sdk-test-token\n" {
+	if string(args) != "get\n"+SDKModule+"/sdk/packagekit@"+sha+"\n" || !strings.Contains(string(private), "example.test/private,"+SDKModule) || string(token) != "sdk-test-token\n" {
 		t.Fatal("incorrect SDK subprocess configuration")
 	}
 	// An unresolved ref cannot invoke Go even if the project is valid.

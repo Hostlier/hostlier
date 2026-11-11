@@ -13,7 +13,14 @@ import (
 	"time"
 )
 
-const DefaultRepository = "Usefused/hostlier-packages"
+// DefaultRepository is the canonical organization-owned package source.
+const DefaultRepository = "Hostlier/hostlier-packages"
+
+// LegacyRepository identifies pre-transfer catalog URLs and the unchanged Go module.
+const LegacyRepository = "Usefused/hostlier-packages"
+
+// SDKModule preserves the declared module identity across the repository transfer.
+const SDKModule = "github.com/" + LegacyRepository
 
 var repositoryPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}/[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$`)
 var versionPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$`)

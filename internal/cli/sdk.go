@@ -47,7 +47,7 @@ func (s *session) sdk() error {
 	if err = install(s.ctx, directory, commit, github.Token); err != nil {
 		return err
 	}
-	return s.print(map[string]string{"module": "github.com/" + githubpackages.DefaultRepository, "commit": commit, "directory": directory, "import": "github.com/" + githubpackages.DefaultRepository + "/sdk/packagekit"})
+	return s.print(map[string]string{"module": githubpackages.SDKModule, "commit": commit, "directory": directory, "import": githubpackages.SDKModule + "/sdk/packagekit"})
 }
 
 // validSDKCommand confines SDK installation to one explicit local Go project operation.

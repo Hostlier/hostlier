@@ -25,7 +25,7 @@ Sidecars are long-running members of the application group. They share its place
 Install the Harnest adapter locally from the Hostlier Git catalog, using the commit returned by discovery:
 
 ```sh
-catalog=https://github.com/Usefused/hostlier-packages.git
+catalog=https://github.com/Hostlier/hostlier-packages.git
 hostlier package available --repository "$catalog"
 hostlier package install harnest --repository "$catalog" --version COMMIT_FROM_LIST
 hostlier init

@@ -46,10 +46,10 @@ func TestAvailableGroupsOnlyInstallableAssets(t *testing.T) {
 		// Exactly one checksum read serves every manifest-backed candidate.
 		switch r.URL.Path {
 		// Latest discovery returns a concrete version for a subsequent explicit installation.
-		case "/repos/Usefused/hostlier-packages/releases/latest":
+		case "/repos/Hostlier/hostlier-packages/releases/latest":
 			return response(raw), nil
 		// Only the Redis artifact has valid fallback integrity evidence.
-		case "/repos/Usefused/hostlier-packages/releases/assets/4":
+		case "/repos/Hostlier/hostlier-packages/releases/assets/4":
 			return response([]byte(strings.Repeat("b", 64) + "  hostlier-redis-linux-amd64\n")), nil
 		// No source archive or executable may be downloaded while listing.
 		default:
@@ -94,10 +94,10 @@ func TestAvailableRejectsUnpublishedAndMismatchedReleases(t *testing.T) {
 			client := New("")
 			// All cases return only metadata and require no executable download.
 			client.HTTP.Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
-				endpoint := "/repos/Usefused/hostlier-packages/releases/latest"
+				endpoint := "/repos/Hostlier/hostlier-packages/releases/latest"
 				// Explicit selection uses the tag route rather than silently consulting latest.
 				if tc.version != "" {
-					endpoint = "/repos/Usefused/hostlier-packages/releases/tags/" + tc.version
+					endpoint = "/repos/Hostlier/hostlier-packages/releases/tags/" + tc.version
 				}
 				// Wrong API routing would allow an unintended release to appear.
 				if r.URL.Path != endpoint {

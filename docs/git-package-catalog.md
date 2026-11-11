@@ -1,6 +1,6 @@
 # Packages from a Git repository
 
-Package catalogs can live in any Git repository reachable over HTTPS or SSH, including a self-hosted server. The CLI defaults to the official `Usefused/hostlier-packages` Git catalog. Use `--repository` to select another catalog:
+Package catalogs can live in any Git repository reachable over HTTPS or SSH, including a self-hosted server. The CLI defaults to the official `Hostlier/hostlier-packages` Git catalog. Use `--repository` to select another catalog:
 
 ```sh
 hostlier package available --repository https://git.example.com/team/packages.git

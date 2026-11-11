@@ -37,7 +37,7 @@ func TestPackageAvailableAndRepositoryListAlias(t *testing.T) {
 		args     []string
 		endpoint string
 	}{
-		{[]string{"package", "available", "--github", "Usefused/hostlier-packages"}, "/repos/Usefused/hostlier-packages/releases/latest"},
+		{[]string{"package", "available", "--github", "Hostlier/hostlier-packages"}, "/repos/Hostlier/hostlier-packages/releases/latest"},
 		{[]string{"package", "list", "--github", "other/packages", "--version", "v0.1.0"}, "/repos/other/packages/releases/tags/v0.1.0"},
 	}
 	// Both discovery forms use GitHub while unqualified package list retains installed inventory semantics.
@@ -66,7 +66,7 @@ func TestPackageAvailableServerFilterOnlyReadsPlatform(t *testing.T) {
 		}
 		return packageexec.Platform{OS: "linux", Arch: "arm64"}, nil
 	}
-	output, err := invoke([]string{"package", "available", "--github", "Usefused/hostlier-packages", "--server", "production"}, "", Options{Home: t.TempDir(), Client: remote, GitHub: availableGitHubFixture(t, "/repos/Usefused/hostlier-packages/releases/latest")})
+	output, err := invoke([]string{"package", "available", "--github", "Hostlier/hostlier-packages", "--server", "production"}, "", Options{Home: t.TempDir(), Client: remote, GitHub: availableGitHubFixture(t, "/repos/Hostlier/hostlier-packages/releases/latest")})
 	// A failed platform request cannot be replaced with the CLI machine's own architecture.
 	if err != nil {
 		t.Fatal(err)

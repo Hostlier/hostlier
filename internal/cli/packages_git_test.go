@@ -86,6 +86,7 @@ func TestRepositoryArtifactAuthenticationIsScoped(t *testing.T) {
 		authenticated bool
 	}{
 		{"https://api.github.com/repos/Usefused/hostlier-packages/releases/assets/123", true},
+		{"https://api.github.com/repos/Hostlier/hostlier-packages/releases/assets/123", true},
 		{"https://api.github.com/repos/another/packages/releases/assets/123", false},
 		{"https://api.github.com/user", false},
 		{"https://artifacts.example.test/package", false},
@@ -93,19 +94,23 @@ func TestRepositoryArtifactAuthenticationIsScoped(t *testing.T) {
 	}
 	// Only exact asset endpoints for the selected source repository can receive the local GitHub token.
 	for _, tc := range cases {
-		transport := repositoryArtifactTransport{repository: "Usefused/hostlier-packages", token: "fixture-secret"}
+		transport := repositoryArtifactTransport{repository: "Hostlier/hostlier-packages", token: "fixture-secret"}
 		// Assert the actual outgoing request rather than only the path predicate.
 		transport.base = packageTransport(func(r *http.Request) (*http.Response, error) {
 			// Generic artifact sources must never inherit GitHub credentials.
 			if (r.Header.Get("Authorization") == "Bearer fixture-secret") != tc.authenticated {
 				t.Fatal("incorrect credential scope", tc.source)
 			}
+			// A pinned old catalog is sent directly to its current owner without a redirect.
+			if tc.authenticated && r.URL.Path != "/repos/Hostlier/hostlier-packages/releases/assets/123" {
+				t.Fatal("old asset URL was not canonicalized")
+			}
 			return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(""))}, nil
 		})
 		request, _ := http.NewRequestWithContext(context.Background(), "GET", tc.source, nil)
 		response, err := transport.RoundTrip(request)
 		// Source headers remain unchanged after credential injection into the private request copy.
-		if err != nil || request.Header.Get("Authorization") != "" {
+		if err != nil || request.Header.Get("Authorization") != "" || request.URL.String() != tc.source {
 			t.Fatal(err)
 		}
 		response.Body.Close()

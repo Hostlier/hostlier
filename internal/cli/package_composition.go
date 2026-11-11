@@ -146,6 +146,10 @@ func (g *enrolledPackages) provided() []string {
 	names := map[string]bool{}
 	// Combine names across all contributors, including the primary package.
 	for _, c := range g.contributions {
+		// Builders may require an auxiliary service credential as well as its URL.
+		for k := range c.Secrets {
+			names[k] = true
+		}
 		// Native resources bind outputs directly to the application.
 		for k := range c.Bindings {
 			names[k] = true
@@ -164,6 +168,14 @@ func mergeContributions(p *model.Project, contributions map[string]packagekit.Pr
 	// Deterministic merging reports the owners of conflicting declarations.
 	for _, name := range slices.Sorted(maps.Keys(contributions)) {
 		c := contributions[name]
+		// Sidecars and secret references are additive; no package may replace an authored member.
+		if err := mergePackageMap(&p.Sidecars, c.Sidecars, owners, "sidecars", name); err != nil {
+			return err
+		}
+		// Only stored secret names enter the public proposal, never resolved credentials.
+		if err := mergePackageMap(&p.Secrets, c.Secrets, owners, "secrets", name); err != nil {
+			return err
+		}
 		// Different settings for one resource may change its ownership or persistence.
 		if err := mergePackageMap(&p.Dependencies, c.Dependencies, owners, "dependencies", name); err != nil {
 			return err

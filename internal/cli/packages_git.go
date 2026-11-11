@@ -99,6 +99,7 @@ type repositoryArtifactTransport struct {
 // RoundTrip keeps private GitHub release support optional without leaking its token to generic artifact hosts.
 func (t repositoryArtifactTransport) RoundTrip(request *http.Request) (*http.Response, error) {
 	request = request.Clone(request.Context())
+	t.canonicalizeAssetURL(request)
 	// Repository credentials apply only to exact asset endpoints for that same source repository.
 	if t.matches(request) && t.token != "" {
 		request.Header.Set("Authorization", "Bearer "+t.token)
@@ -112,11 +113,31 @@ func (t repositoryArtifactTransport) matches(request *http.Request) bool {
 	if request.URL.Scheme != "https" || request.URL.Host != "api.github.com" || request.URL.RawQuery != "" {
 		return false
 	}
-	prefix := "/repos/" + t.repository + "/releases/assets/"
+	repository := t.repository
+	// Old catalog selections still refer to the same transferred official repository.
+	if repository == githubpackages.LegacyRepository {
+		repository = githubpackages.DefaultRepository
+	}
+	prefix := "/repos/" + repository + "/releases/assets/"
 	// A manifest may not repurpose package access to another API surface.
 	if !strings.HasPrefix(request.URL.Path, prefix) {
 		return false
 	}
 	id, err := strconv.ParseInt(strings.TrimPrefix(request.URL.Path, prefix), 10, 64)
 	return err == nil && id > 0
+}
+
+// canonicalizeAssetURL avoids a credential-dropping redirect for pinned pre-transfer catalogs.
+func (t repositoryArtifactTransport) canonicalizeAssetURL(request *http.Request) {
+	// Custom repositories never gain access to either official repository's credentials.
+	if t.repository != githubpackages.DefaultRepository && t.repository != githubpackages.LegacyRepository {
+		return
+	}
+	prefix := "/repos/" + githubpackages.LegacyRepository + "/releases/assets/"
+	// Rewrite only known GitHub asset routes; all other URL validation remains in matches.
+	if request.URL.Scheme == "https" && request.URL.Host == "api.github.com" && strings.HasPrefix(request.URL.Path, prefix) {
+		target := *request.URL
+		target.Path = "/repos/" + githubpackages.DefaultRepository + "/releases/assets/" + strings.TrimPrefix(target.Path, prefix)
+		request.URL = &target
+	}
 }

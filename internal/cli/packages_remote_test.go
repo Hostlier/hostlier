@@ -40,7 +40,7 @@ func TestRemotePackageUsesServerArchitectureAndApproval(t *testing.T) {
 	}
 	github := packageGitHubFixture(t, data)
 	remote, uploaded := packageRemoteFixture(t, data)
-	output, err := invoke([]string{"package", "install", "postgres", "--github", "Usefused/hostlier-packages", "--version", "v0.1.0", "--server", "production"}, "", Options{Home: root, Client: remote, GitHub: github})
+	output, err := invoke([]string{"package", "install", "postgres", "--github", "Hostlier/hostlier-packages", "--version", "v0.1.0", "--server", "production"}, "", Options{Home: root, Client: remote, GitHub: github})
 	// The CLI must wait for the simulated independent approval and print the installed identity.
 	if err != nil || !strings.Contains(output, packageexec.Digest(data)) {
 		t.Fatal(err, output)
@@ -62,10 +62,10 @@ func packageGitHubFixture(t *testing.T, data []byte) *githubpackages.Client {
 		// Wrong tags or asset identifiers cannot silently download another binary.
 		switch r.URL.Path {
 		// Supply an arm64 artifact even when the CLI runs on Darwin or amd64.
-		case "/repos/Usefused/hostlier-packages/releases/tags/v0.1.0":
+		case "/repos/Hostlier/hostlier-packages/releases/tags/v0.1.0":
 			raw, _ = json.Marshal(map[string]any{"tag_name": "v0.1.0", "assets": []any{map[string]any{"id": 1, "name": "hostlier-postgres-linux-arm64", "size": len(data), "digest": "sha256:" + packageexec.Digest(data)}}})
 		// Asset bytes are downloaded by GitHub API identity.
-		case "/repos/Usefused/hostlier-packages/releases/assets/1":
+		case "/repos/Hostlier/hostlier-packages/releases/assets/1":
 			raw = data
 		// Extra lookups indicate incorrect release selection.
 		default:
@@ -134,7 +134,7 @@ func TestSDKCommandResolvesCommitBeforeInstalling(t *testing.T) {
 	// Resolve the tag through the same API used in production.
 	github.HTTP.Transport = packageTransport(func(r *http.Request) (*http.Response, error) {
 		// SDK setup cannot resolve another repository or an implicit default branch.
-		if r.URL.Path != "/repos/Usefused/hostlier-packages/commits/v0.1.0" {
+		if r.URL.Path != "/repos/Hostlier/hostlier-packages/commits/v0.1.0" {
 			t.Fatal(r.URL.Path)
 		}
 		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"sha":"` + sha + `"}`))}, nil
