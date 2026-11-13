@@ -82,10 +82,24 @@ func (s *session) bootstrapSSHArguments(requestID string) []string {
 
 // sshArguments applies the native host-key and forwarding policy to either bootstrap flow.
 func (s *session) sshArguments() []string {
-	args := []string{"-o", "StrictHostKeyChecking=ask", "-o", "BatchMode=no", "-o", "ForwardAgent=no", "-o", "ClearAllForwardings=yes", "-o", "RequestTTY=no", "-o", "ConnectTimeout=15"}
-	// A user's explicit SSH configuration can supply identities, ports and jump hosts.
-	if s.flags["ssh-config"] != "" {
-		args = append(args, "-F", s.flags["ssh-config"])
+	return nativeSSHArguments(s.flags["ssh-config"], true, false)
+}
+
+// nativeSSHArguments shares host verification and forwarding policy across setup and shells.
+func nativeSSHArguments(config string, interactive, tty bool) []string {
+	batch, requestTTY := "yes", "no"
+	// Interactive terminals may prompt for an identity or new host-key confirmation.
+	if interactive {
+		batch = "no"
+	}
+	// Explicit terminal requests support interactive shells and commands such as sudo.
+	if tty {
+		requestTTY = "force"
+	}
+	args := []string{"-o", "StrictHostKeyChecking=ask", "-o", "BatchMode=" + batch, "-o", "ForwardAgent=no", "-o", "ForwardX11=no", "-o", "ClearAllForwardings=yes", "-o", "RequestTTY=" + requestTTY, "-o", "ConnectTimeout=15", "-o", "ControlMaster=no", "-o", "ControlPath=none", "-o", "RemoteCommand=none"}
+	// Native configuration retains identities, ports and jump-host routing.
+	if config != "" {
+		args = append(args, "-F", config)
 	}
 	return args
 }

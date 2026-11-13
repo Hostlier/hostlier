@@ -131,6 +131,10 @@ func (c *Controller) humanReview(request humanRequest, actor string) (json.RawMe
 	if request.Path == "/v1/controller/update/apply" {
 		return c.controllerUpdateReview(request, actor, review)
 	}
+	// SSH provisioning review shows the actual key fingerprint and OS privilege boundary.
+	if request.Path == "/v1/controller/ssh" {
+		return c.sshAccessReview(request, actor, review)
+	}
 	parts := strings.Split(strings.Trim(request.Path, "/"), "/")
 	// Deployment review is bound to the server-retained plan rather than client-provided prose.
 	if len(parts) == 4 && parts[1] == "plans" && parts[3] == "apply" {

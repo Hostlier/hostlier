@@ -55,6 +55,7 @@ var commandGroups = map[string][]helpEntry{
 		{"workflow", "Inspect or recover workflow steps"},
 	},
 	"server": {
+		{"ssh", "Open a shell or run a Linux command over SSH"},
 		{"join", "Connect this installed box to a master"},
 		{"add", "Install a controller and enroll it with the selected master"},
 		{"list", "List saved server profiles"},
@@ -108,7 +109,7 @@ func routeArguments(parsed arguments) (arguments, error) {
 	}
 	parsed.commandPath = group + " " + action
 	// Server profile actions already use this positional shape.
-	if group == "server" && (action == "join" || action == "add" || action == "list" || action == "use") {
+	if group == "server" && (action == "ssh" || action == "join" || action == "add" || action == "list" || action == "use") {
 		return parsed, nil
 	}
 	args := append([]string(nil), parsed.args[:offset]...)

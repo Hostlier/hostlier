@@ -20,6 +20,7 @@ import (
 type Options struct {
 	// Maintenance is provided only by the installed server executable.
 	Maintenance model.ControllerMaintenance
+	SSHAccess   model.ControllerSSHAccess
 	// TunnelDomain reserves a dedicated wildcard suffix; TunnelURL is the public HTTPS controller origin.
 	TunnelDomain, TunnelURL            string
 	ManagedCollector                   bool

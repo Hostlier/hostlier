@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"hostlier/internal/client"
 	"hostlier/internal/config"
 	"hostlier/internal/fleet"
 	"hostlier/internal/model"
@@ -115,6 +116,11 @@ func (s *session) addServer() error {
 func (s *session) verifyAddedServer(record fleet.HostRecord) error {
 	if err := s.checkServer(record); err != nil {
 		return err
+	}
+	if s.masterProfile != "" && s.flags["socket"] == "" {
+		if err := s.store.SaveSSH(s.masterProfile, record.Name, client.SSHConnection{Destination: s.target, ConfigFile: s.sshConfigPath()}); err != nil {
+			return err
+		}
 	}
 	if s.command == "connect" && s.masterProfile != "" && s.flags["socket"] == "" {
 		if err := s.store.UseHost(s.masterProfile, record.Name); err != nil {

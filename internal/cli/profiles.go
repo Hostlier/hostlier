@@ -38,6 +38,8 @@ func (s *session) server() error {
 
 	// Select a local profile-management action.
 	switch s.sub {
+	case "ssh":
+		return s.serverSSH()
 	case "join":
 		return s.joinMaster()
 	case "add":

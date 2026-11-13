@@ -56,6 +56,7 @@ the [controller gRPC route](STREAMING.md) over HTTP/2.
 
 ## Guides
 
+- [Server SSH and automatic unprivileged access](docs/guides/server-ssh.md)
 - [Controller updates and migration previews](docs/controller-maintenance.md)
 - [Docker to k3s migration, backups and rollback](docs/runtime-migration.md)
 

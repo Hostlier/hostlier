@@ -4,7 +4,7 @@ set -eu
 cd "$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
 cli_dependencies=$(go list -mod=readonly -deps ./cmd/hostlier)
 controller_dependencies=$(go list -mod=readonly -deps ./cmd/hostlier-controller)
-if printf '%s\n' "$cli_dependencies" | grep -E '^hostlier/internal/(installer|controller|controllercmd|runtime|store|recovery|observation)(/|$)'; then
+if printf '%s\n' "$cli_dependencies" | grep -E '^hostlier/internal/(installer|controller|controllercmd|runtime|store|recovery|observation|sshaccess)(/|$)'; then
   printf '%s\n' 'CLI must not embed server implementation packages' >&2
   exit 1
 fi

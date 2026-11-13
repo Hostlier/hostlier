@@ -90,7 +90,7 @@ func (c *Controller) maintenanceRead(r *http.Request, actor string, generation i
 	// Capabilities let a newer CLI explain the one-time bootstrap requirement.
 	if r.URL.Path == "/v1/controller/capabilities" {
 		_, preparation := c.opts.Maintenance.(model.ControllerMigrationPreparation)
-		return map[string]bool{"updates": c.opts.Maintenance != nil, "migrationPreview": c.opts.Maintenance != nil, "migrationPreparation": preparation}, nil
+		return map[string]bool{"sshAccess": c.opts.SSHAccess != nil, "updates": c.opts.Maintenance != nil, "migrationPreview": c.opts.Maintenance != nil, "migrationPreparation": preparation}, nil
 	}
 	// Embedded/test controllers cannot accidentally gain privileged execution.
 	if c.opts.Maintenance == nil {
@@ -147,6 +147,10 @@ func writeMaintenanceResult(w http.ResponseWriter, value any, err error) {
 
 // apiControllerMaintenance is reachable through the normal independent approval boundary.
 func (c *Controller) apiControllerMaintenance(r *http.Request, p []string, actor string) (any, error) {
+	// Native shell enrollment has its own owner-only approval contract.
+	if r.URL.Path == "/v1/controller/ssh" {
+		return c.apiSSHAccess(r, actor)
+	}
 	// No migration execution or arbitrary process launch is exposed remotely.
 	if r.Method != "POST" || r.URL.Path != "/v1/controller/update/apply" {
 		return endpointNotFound()

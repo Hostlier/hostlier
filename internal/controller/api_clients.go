@@ -34,6 +34,12 @@ func (c *Controller) apiClients(r *http.Request, p []string, actor string) (any,
 		if cl == nil {
 			return nil, model.Err("NOT_FOUND", "Client not found")
 		}
+		// Revoke the device's managed SSH credential before acknowledging device revocation.
+		if c.opts.SSHAccess != nil {
+			if err := c.opts.SSHAccess.Revoke(r.Context(), p[2]); err != nil {
+				return nil, err
+			}
+		}
 		cl.Revoked = true
 		c.log("Client revoked", "", "info")
 		return map[string]any{"revoked": true}, nil

@@ -19,9 +19,10 @@ type Profile struct {
 
 // Profiles records named servers and the current CLI selection.
 type Profiles struct {
-	CurrentHost string             `json:"currentHost,omitempty"`
-	Current     string             `json:"current,omitempty"`
-	Servers     map[string]Profile `json:"servers"`
+	SSH         map[string]SSHConnection `json:"ssh,omitempty"`
+	CurrentHost string                   `json:"currentHost,omitempty"`
+	Current     string                   `json:"current,omitempty"`
+	Servers     map[string]Profile       `json:"servers"`
 }
 
 // Store owns the protected credential directory and its durable profile documents.
@@ -216,6 +217,12 @@ func (s Store) Remove(name string) error {
 	}
 	delete(secrets, profileCredentialKey(name, p.Servers[name]))
 	delete(p.Servers, name)
+	for target := range p.SSH {
+		// Removing a profile also forgets its associated native SSH destinations.
+		if target == name || strings.HasPrefix(target, name+"/") {
+			delete(p.SSH, target)
+		}
+	}
 	// Clear the selection when its profile is removed.
 	if p.Current == name {
 		p.Current, p.CurrentHost = "", ""

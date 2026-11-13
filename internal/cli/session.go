@@ -40,6 +40,7 @@ type Options struct {
 
 // arguments keeps parsed positional arguments separate from flags.
 type arguments struct {
+	remoteArgs  []string
 	commandPath string
 	args        []string
 	flags       map[string]string

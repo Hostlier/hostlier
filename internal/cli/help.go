@@ -52,9 +52,14 @@ func (s *session) leafHelp(item bundled.Skill) string {
 	for _, usage := range helpUsage(item.Command, path, help.usage) {
 		fmt.Fprintf(&out, "  hostlier %s\n", usage)
 	}
+	// SSH transport notes belong only to the SSH leaf, not profile selection or fleet setup.
+	note := help.note
+	if item.Command == "server" && path != "server ssh" {
+		note = ""
+	}
 	// Operational notes belong at the leaf, after its syntax.
-	if help.note != "" {
-		fmt.Fprintf(&out, "\n%s\n", help.note)
+	if note != "" {
+		fmt.Fprintf(&out, "\n%s\n", note)
 	}
 	fmt.Fprintf(&out, "\nFull guide: hostlier skills show %s", item.Command)
 	return out.String()

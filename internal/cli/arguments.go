@@ -13,7 +13,7 @@ import (
 // parse separates positionals and recognized flags while rejecting malformed options.
 func parse(args []string) (arguments, error) {
 	result := arguments{flags: map[string]string{}}
-	booleans := map[string]bool{"detect": true, "ui": true, "ssh-sudo": true, "global": true, "force": true, "yes": true, "dry-run": true, "json": true, "toon": true, "stdin": true, "token-stdin": true, "request": true, "follow": true, "detach": true, "purge": true, "keep-apps": true, "help": true, "watch": true, "source-stopped": true, "all": true}
+	booleans := map[string]bool{"tty": true, "detect": true, "ui": true, "ssh-sudo": true, "global": true, "force": true, "yes": true, "dry-run": true, "json": true, "toon": true, "stdin": true, "token-stdin": true, "request": true, "follow": true, "detach": true, "purge": true, "keep-apps": true, "help": true, "watch": true, "source-stopped": true, "all": true}
 	values := map[string]bool{}
 	// Register value-taking options so they cannot be mistaken for booleans.
 	for _, v := range strings.Fields("backup-dir release-dir package compose dependencies architecture context service bridge-id connections engine-url client-id client-secret-ref family-id secret-name allow repository github version directory resource destination every retain to image before limit tail ssh ssh-config ssh-socket email auth auth-config data-config key public-key app app-prefix max-apps route-domain scope for device max-uses secrets create-secrets on url fingerprint controller-fingerprint target file route server socket name from-env domain runtime controller-hostname state-dir config port host hostname log-path operation revision storage output backup cursor input cpu memory replicas proxy component") {
@@ -22,6 +22,11 @@ func parse(args []string) (arguments, error) {
 	// Consume each command token once while retaining positional order.
 	for i := 0; i < len(args); i++ {
 		value := args[i]
+		// Only native SSH accepts an opaque command tail; its flags never affect Hostlier.
+		if value == "--" && len(result.args) >= 2 && result.args[0] == "server" && result.args[1] == "ssh" {
+			result.remoteArgs = append([]string{}, args[i+1:]...)
+			break
+		}
 		// Support the conventional short help flag at every command level.
 		if value == "-h" {
 			value = "--help"

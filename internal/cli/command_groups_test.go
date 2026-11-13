@@ -21,7 +21,7 @@ func TestGroupedCommandsPreserveHandlerArguments(t *testing.T) {
 			routed, err := routeArguments(parsed)
 			want := []string{entry.name, "target", "step"}
 			// Existing server profile commands retain the server prefix.
-			if group == "server" && (entry.name == "join" || entry.name == "add" || entry.name == "list" || entry.name == "use") {
+			if group == "server" && (entry.name == "ssh" || entry.name == "join" || entry.name == "add" || entry.name == "list" || entry.name == "use") {
 				want = append([]string{group}, want...)
 			}
 			// Routing must preserve both positions and the selected controller.

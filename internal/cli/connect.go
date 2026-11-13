@@ -55,6 +55,12 @@ func (s *session) connectController(renewOnly bool) error {
 	if err = s.saveConnection(target, enrollment, credential); err != nil {
 		return err
 	}
+	// Retain successful setup transport details for subsequent native shell connections.
+	if s.flags["ssh"] != "" {
+		if err := s.store.SaveSSH(target.Name, "", client.SSHConnection{Destination: s.flags["ssh"], ConfigFile: s.sshConfigPath()}); err != nil {
+			return err
+		}
+	}
 	return s.connectionResult(target)
 }
 
