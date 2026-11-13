@@ -42,7 +42,7 @@ func inspectSharedInfrastructure(ctx context.Context, p *Plan) {
 	if !standardNginxService(ctx) {
 		p.Errors = append(p.Errors, "nginx-existing requires system nginx.service running /usr/sbin/nginx with /etc/nginx/nginx.conf and no custom prefix")
 	}
-	if _, ok := command(ctx, "/usr/bin/certbot", "--version"); !ok { // Require compatible existing services without installing or replacing them.
+	if !existingCertbotAvailable(ctx, command, os.Readlink) { // Require compatible existing services without installing or replacing them.
 		p.Errors = append(p.Errors, "Install Certbot before using nginx-existing; Hostlier will not change existing packages")
 	}
 	digest, err := edge.InspectShared(ctx, edge.SharedOptions{}, []string{p.ControllerHostname})
