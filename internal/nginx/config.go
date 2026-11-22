@@ -4,15 +4,60 @@ package nginx
 import (
 	"fmt"
 	"net"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
+	"sync"
 
 	"hostlier/internal/config"
 	"hostlier/internal/controledge"
 	"hostlier/internal/model"
 )
+
+var (
+	nginxVersionOnce  sync.Once
+	nginxVersionCache string
+	nginxVersion      = detectNginxVersion
+)
+
+// detectNginxVersion caches the installed Nginx version output for directive selection.
+func detectNginxVersion() string {
+	// Probe the local binary once per process so repeated renders do not spawn extra commands.
+	nginxVersionOnce.Do(func() {
+		output, err := exec.Command("nginx", "-v").CombinedOutput()
+		// Fall back to the standard system binary when PATH omits /usr/sbin.
+		if err != nil {
+			output, _ = exec.Command("/usr/sbin/nginx", "-v").CombinedOutput()
+		}
+		nginxVersionCache = string(output)
+	})
+	return nginxVersionCache
+}
+
+// supportsHTTP2Directive reports whether the Nginx version output supports the 1.25.1+ http2 directive.
+func supportsHTTP2Directive(version string) bool {
+	match := regexp.MustCompile(`nginx/([0-9]+)\.([0-9]+)\.([0-9]+)`).FindStringSubmatch(version)
+	// Default to the standalone http2 directive unless an older 1.24-era binary is detected.
+	if len(match) != 4 {
+		return true
+	}
+	major, _ := strconv.Atoi(match[1])
+	minor, _ := strconv.Atoi(match[2])
+	patch, _ := strconv.Atoi(match[3])
+	return major > 1 || major == 1 && (minor > 25 || minor == 25 && patch >= 1)
+}
+
+// tlsServerHeader uses the standalone http2 directive on Nginx 1.25.1+ and the legacy listen parameter on 1.24.
+func tlsServerHeader(address, host, cert string) string {
+	// Nginx 1.25.1 deprecated "listen ... http2" in favor of "http2 on;".
+	if supportsHTTP2Directive(nginxVersion()) {
+		return fmt.Sprintf(" server { listen %s ssl; http2 on; server_name %s; ssl_certificate %s/fullchain.pem; ssl_certificate_key %s/privkey.pem; ssl_protocols TLSv1.2 TLSv1.3;\n", address, host, cert, cert)
+	}
+	return fmt.Sprintf(" server { listen %s ssl http2; server_name %s; ssl_certificate %s/fullchain.pem; ssl_certificate_key %s/privkey.pem; ssl_protocols TLSv1.2 TLSv1.3;\n", address, host, cert, cert)
+}
 
 // Route binds a validated project route to one or more private runtime endpoints.
 type Route struct {
@@ -96,7 +141,7 @@ func Bootstrap(o Options) ([]byte, error) {
 // hostServer renders one host and rejects unsafe upstreams before nginx parses configuration.
 func hostServer(o Options, host, controller, upstream string, routes []Route) (string, error) {
 	cert := filepath.Join(o.CertificateDirectory, "live", host)
-	text := fmt.Sprintf(" server { listen %s ssl http2; server_name %s; ssl_certificate %s/fullchain.pem; ssl_certificate_key %s/privkey.pem; ssl_protocols TLSv1.2 TLSv1.3;\n", o.HTTPSAddress, host, cert, cert)
+	text := tlsServerHeader(o.HTTPSAddress, host, cert)
 	// Public transport terminates at the gateway; backend metadata is accepted only on loopback.
 	if o.Gateway {
 		text = gatewayHost(o, host)

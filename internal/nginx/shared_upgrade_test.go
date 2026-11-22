@@ -178,3 +178,29 @@ func TestUpgradeSharedControllerRejectsEditedInclude(t *testing.T) {
 		t.Fatal("edited include changed")
 	}
 }
+
+// TestSharedHTTP2DirectiveSelectionAndUpgrade verifies modern "http2 on;" rendering and 1.24 compatibility.
+func TestSharedHTTP2DirectiveSelectionAndUpgrade(t *testing.T) {
+	o := sharedFixture(t)
+	writeLiveCertificates(t, o.Options, 1)
+	withNginxVersion(t, "nginx version: nginx/1.24.0 (Ubuntu)")
+	// Render the legacy 1.24 listener syntax first for both app and controller routes.
+	if err := ApplyShared(context.Background(), o, "controller.example.test", "127.0.0.1:7463", sharedRoute()); err != nil {
+		t.Fatal(err)
+	}
+	legacy, _ := os.ReadFile(o.Fragment)
+	// Confirm 1.24 uses the listen parameter before 1.25.1 introduced the http2 directive.
+	if strings.Count(string(legacy), "listen 443 ssl http2;") != 2 || strings.Contains(string(legacy), "http2 on;") {
+		t.Fatalf("unexpected 1.24 config: %s", legacy)
+	}
+	withNginxVersion(t, "nginx version: nginx/1.28.3 (Ubuntu)")
+	// Upgrading on Nginx 1.25.1+ replaces the deprecated listen parameter with "http2 on;".
+	if err := UpgradeSharedController(context.Background(), o, "controller.example.test", "127.0.0.1:7463"); err != nil {
+		t.Fatal(err)
+	}
+	updated, _ := os.ReadFile(o.Fragment)
+	// Verify the upgraded include has no deprecated "listen ... http2" directive on any route.
+	if strings.Contains(string(updated), "ssl http2;") || strings.Count(string(updated), "listen 443 ssl; http2 on;") != 2 {
+		t.Fatalf("deprecated listen http2 remained in include: %s", updated)
+	}
+}

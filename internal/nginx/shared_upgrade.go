@@ -52,6 +52,7 @@ func UpgradeSharedController(ctx context.Context, options SharedOptions, control
 	candidate = append(candidate, previous[:start]...)
 	candidate = append(candidate, server...)
 	candidate = append(candidate, previous[end:]...)
+	candidate = upgradeHTTP2ServerHeaders(candidate, o.HTTPSAddress)
 	if bytes.Equal(previous, candidate) {
 		return nil
 	}
@@ -60,11 +61,23 @@ func UpgradeSharedController(ctx context.Context, options SharedOptions, control
 	return publishShared(ctx, o, candidate, []string{controller})
 }
 
+// upgradeHTTP2ServerHeaders migrates generated TLS server headers to the 1.25.1+ http2 directive.
+func upgradeHTTP2ServerHeaders(data []byte, listener string) []byte {
+	// Keep the legacy listen parameter when the installed Nginx binary predates 1.25.1.
+	if !supportsHTTP2Directive(nginxVersion()) {
+		return data
+	}
+	oldHeader := fmt.Sprintf("server { listen %s ssl http2; server_name ", listener)
+	newHeader := fmt.Sprintf("server { listen %s ssl; http2 on; server_name ", listener)
+	return []byte(strings.ReplaceAll(string(data), oldHeader, newHeader))
+}
+
 // sharedControllerServerSpan finds exactly one previously generated TLS server.
 func sharedControllerServerSpan(data []byte, listener, controller string) (int, int, error) {
 	text := string(data)
 	start := -1
 	for _, marker := range []string{
+		fmt.Sprintf("server { listen %s ssl; http2 on; server_name %s;", listener, controller),
 		fmt.Sprintf("server { listen %s ssl http2; server_name %s;", listener, controller),
 		fmt.Sprintf("server { listen %s ssl; server_name %s;", listener, controller),
 	} {

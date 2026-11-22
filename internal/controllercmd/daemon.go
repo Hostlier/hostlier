@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"hostlier/internal/config"
@@ -15,6 +16,7 @@ import (
 	"hostlier/internal/fleet"
 	"hostlier/internal/migration"
 	"hostlier/internal/model"
+	edge "hostlier/internal/nginx"
 	"hostlier/internal/recovery"
 	"hostlier/internal/resourceclient"
 	runtimes "hostlier/internal/runtime"
@@ -137,7 +139,8 @@ func (s *session) controllerSettings(stateDir string) (controllerSettings, error
 		return controllerSettings{}, err
 	}
 
-	return controllerSettings{runtime: runtime, hostname: hostname, host: host, proxy: proxy, port: port}, nil
+	settings := controllerSettings{runtime: runtime, hostname: hostname, host: host, proxy: proxy, port: port}
+	return settings, upgradeInstalledNginxEdge(s.ctx, stateDir, settings)
 }
 
 // selectedProxy preserves the installation selection unless an explicit reviewed proxy was requested.
@@ -187,4 +190,46 @@ func (s *session) controllerEmail(hostname string) (*emailauth.Service, error) {
 // allowedControllerBind permits remote binding only when the listener will enforce a fleet peer pin.
 func allowedControllerBind(host, pin string) bool {
 	return fleet.ValidPin(pin) || host == "127.0.0.1" || host == "::1" || host == "localhost"
+}
+
+// upgradeInstalledNginxEdge refreshes an existing owned Nginx configuration on daemon startup.
+func upgradeInstalledNginxEdge(ctx context.Context, stateDir string, settings controllerSettings) error {
+	// Only the installed host daemon manages system Nginx paths in /etc.
+	if stateDir != "/var/lib/hostlier" {
+		return nil
+	}
+	// Supply a background context when settings are loaded outside a live command context.
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	upstream := fmt.Sprintf("%s:%d", settings.host, settings.port)
+	// Refresh the coexistence include in place when one is already present on disk.
+	if settings.proxy == "nginx-existing" {
+		o := edge.SharedDefaults(edge.SharedOptions{})
+		// Skip startup migration before initial coexistence publication creates the include.
+		if _, err := os.Stat(o.Fragment); err == nil {
+			return edge.UpgradeSharedController(ctx, o, settings.hostname, upstream)
+		}
+		return nil
+	}
+	// Refresh standalone or gateway Nginx configurations when their owned file already exists.
+	if settings.proxy == "nginx" || settings.proxy == "nginx-gateway" {
+		return upgradeStandaloneNginxEdge(ctx, settings.proxy == "nginx-gateway", settings.hostname, upstream)
+	}
+	return nil
+}
+
+// upgradeStandaloneNginxEdge migrates an existing standalone or gateway Nginx file in place.
+func upgradeStandaloneNginxEdge(ctx context.Context, gateway bool, hostname, upstream string) error {
+	path := "/etc/hostlier/nginx/nginx.conf"
+	// Gateway installations keep their private configuration in a separate directory.
+	if gateway {
+		path = "/etc/hostlier/nginx-gateway/nginx.conf"
+	}
+	data, err := os.ReadFile(path)
+	// Skip startup migration when the initial configuration or TLS cutover is not yet present.
+	if err != nil || !gateway && !strings.Contains(string(data), "ssl_certificate ") {
+		return nil
+	}
+	return edge.UpgradeController(ctx, edge.Options{Gateway: gateway}, hostname, upstream)
 }

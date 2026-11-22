@@ -6,8 +6,19 @@ import (
 	"testing"
 )
 
+// withNginxVersion overrides the detected Nginx release string for one test.
+func withNginxVersion(t *testing.T, version string) {
+	t.Helper()
+	previous := nginxVersion
+	// Force a deterministic Nginx version independent of the test runner host.
+	nginxVersion = func() string { return version }
+	// Restore the production detector after the test completes.
+	t.Cleanup(func() { nginxVersion = previous })
+}
+
 // TestGatewayRenderKeepsMetadataPrivateAndPreservesWirePolicies verifies the actual backend configuration.
 func TestGatewayRenderKeepsMetadataPrivateAndPreservesWirePolicies(t *testing.T) {
+	withNginxVersion(t, "nginx version: nginx/1.28.3")
 	e := model.Endpoint{Exposure: "public", Protocol: "http", Route: "https://app.example.com", HTTP: &model.HTTPPolicy{Routes: map[string]model.HTTPRoutePolicy{"socket": {Path: "/ws", Protocol: "websocket", Methods: []string{"CONNECT"}, HTTPVersions: []string{"h2", "h3"}}}}}
 	p := model.Project{Name: "app", Route: e.Route, Endpoint: &e}
 	data, err := Render(Options{Gateway: true}, "", "", []Route{{Project: p, Upstreams: []string{"127.0.0.1:18081"}}})
@@ -16,7 +27,7 @@ func TestGatewayRenderKeepsMetadataPrivateAndPreservesWirePolicies(t *testing.T)
 		t.Fatal(err)
 	}
 	// Both sockets are private and no public TLS/certificate service is introduced.
-	for _, want := range []string{"listen 127.0.0.1:14443;", "listen 127.0.0.1:14444 http2;", "location = /ws", "$http_x_hostlier_gateway_method", "$http_x_hostlier_gateway_protocol", "X-Forwarded-Proto $http_x_hostlier_gateway_scheme", "HTTP/2|HTTP/3"} {
+	for _, want := range []string{"listen 127.0.0.1:14443;", "listen 127.0.0.1:14444; http2 on;", "location = /ws", "$http_x_hostlier_gateway_method", "$http_x_hostlier_gateway_protocol", "X-Forwarded-Proto $http_x_hostlier_gateway_scheme", "HTTP/2|HTTP/3"} {
 		// Missing guards would silently weaken protocol admission after conversion to HTTP/1.
 		if !strings.Contains(string(data), want) {
 			t.Fatalf("missing %s: %s", want, data)

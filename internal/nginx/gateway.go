@@ -60,6 +60,10 @@ func gatewayPreamble(o Options) string {
 
 // gatewayHost routes both private backend protocols under the original hostname.
 func gatewayHost(o Options, host string) string {
+	// Nginx 1.25.1 deprecated "listen ... http2" in favor of "http2 on;".
+	if supportsHTTP2Directive(nginxVersion()) {
+		return fmt.Sprintf(" server { listen %s; listen %s; http2 on; server_name %s;\n", o.HTTPSAddress, o.H2Address, host)
+	}
 	return fmt.Sprintf(" server { listen %s; listen %s http2; server_name %s;\n", o.HTTPSAddress, o.H2Address, host)
 }
 

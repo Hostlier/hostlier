@@ -171,7 +171,8 @@ func CheckSharedController(ctx context.Context, options SharedOptions, controlle
 		return err
 	}
 	marker := fmt.Sprintf("server { listen %s ssl; server_name %s;", o.HTTPSAddress, controller)
-	if !strings.Contains(strings.ReplaceAll(string(data), " ssl http2;", " ssl;"), marker) { // Preserve existing application routes while verifying controller readiness.
+	normalized := strings.ReplaceAll(strings.ReplaceAll(string(data), " ssl http2;", " ssl;"), " ssl; http2 on;", " ssl;")
+	if !strings.Contains(normalized, marker) { // Preserve existing application routes while verifying controller readiness.
 		return errors.New("Hostlier controller TLS route is incomplete; inspect the owned include before retrying initialization")
 	}
 	certificates, err := sharedCertificates(o, []string{controller})
