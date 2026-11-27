@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"hostlier/internal/model"
 )
@@ -46,8 +47,16 @@ func TestRouteConflictIdentifiesPendingEndpointOwner(t *testing.T) {
 // TestPlanAcceptsBoundedEscapedConfiguration proves managed files fit the actual strict HTTP request boundary.
 func TestPlanAcceptsBoundedEscapedConfiguration(t *testing.T) {
 	c := newTestController(t, t.TempDir(), &recordingRuntime{}, nil)
-	defer closeController(t, c)
+	t.Cleanup(func() {
+		// The activity writer can still be saving the large plans under the race detector.
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := c.Close(ctx); err != nil {
+			t.Errorf("close controller after large plans: %v", err)
+		}
+	})
 	p := project()
+	api, _, _ := pairedScopeFixture(t, c, deploymentScope{Apps: []string{p.Name}, DurationSeconds: 3600, MaxUses: 2})
 	p.Version = 2
 	p.Source = &model.Source{Image: p.Image}
 	p.Endpoint = &model.Endpoint{Exposure: "public", Port: p.Port, Route: p.Route}
@@ -61,7 +70,6 @@ func TestPlanAcceptsBoundedEscapedConfiguration(t *testing.T) {
 	if status != 200 {
 		t.Fatalf("plan status=%d response=%v", status, out)
 	}
-	api, _, _ := pairedScopeFixture(t, c, deploymentScope{Apps: []string{p.Name}, DurationSeconds: 3600, MaxUses: 2})
 	var plan Plan
 	if err := api.Request(context.Background(), "POST", "/v1/plans", body, &plan); err != nil {
 		t.Fatal(err)
