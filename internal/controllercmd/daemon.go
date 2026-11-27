@@ -25,6 +25,12 @@ import (
 
 // runController loads runtime and server settings before listening until shutdown.
 func (s *session) runController() error {
+	if s.flags["mode"] == "memory" {
+		return s.runMemoryController()
+	}
+	if s.flags["mode"] != "" && s.flags["mode"] != "compute" {
+		return model.Err("CONTROLLER_MODE", "Mode must be compute or memory")
+	}
 	var e error
 
 	stateDir := defaultValue(s.flags["state-dir"], "/var/lib/hostlier")

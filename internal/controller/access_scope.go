@@ -158,6 +158,9 @@ func (c *Controller) scopedPlanInput(r *http.Request, g *Authorization) bool {
 
 // scopedProject checks nested secret references and forbids preparation with data-bearing effects.
 func scopedProject(p model.Project, allowed []string) bool {
+	if p.Kind == "memory" || len(p.Exports) > 0 {
+		return false
+	}
 	// Workflows and dependencies may execute external provisioning during preparation.
 	if p.Workflow != nil || len(p.Dependencies) > 0 || len(p.Volumes) > 0 {
 		return false

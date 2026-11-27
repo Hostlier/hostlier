@@ -1,0 +1,12 @@
+version: 3
+kind: memory
+name: library
+exports:
+  workspace:
+    path: /srv/shared/projects
+    protocols: [webdav, s3]
+    readOnly: false
+  reference:
+    path: /srv/shared/reference.pdf
+    protocols: [webdav]
+    readOnly: true

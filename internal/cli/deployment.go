@@ -2,6 +2,7 @@ package cli
 
 import (
 	"net/url"
+	"strings"
 
 	"hostlier/internal/config"
 	"hostlier/internal/model"
@@ -79,6 +80,9 @@ func (s *session) deploymentSpecFor(minion *minionDeployment) (model.Project, st
 
 // prepareDeploymentProject validates before preparing and uploading any local sources.
 func (s *session) prepareDeploymentProject(p model.Project) (model.Project, error) {
+	if p.Kind == "memory" {
+		return config.ValidateProject(p)
+	}
 	// Snapshot config sources before validating the immutable deployment input.
 	p, err := s.prepareConfigFiles(p)
 	// Every declared file must be available before network preparation.
@@ -173,6 +177,15 @@ func (s *session) lifecycle() error {
 	// Reject this path: Application name required.
 	if s.sub == "" {
 		return model.Err("ARGUMENTS", "Application name required")
+	}
+	if strings.HasPrefix(s.parsed.commandPath, "memory ") {
+		var app applicationSpec
+		if err := s.request("GET", "/v1/apps/"+url.PathEscape(s.sub), nil, &app); err != nil {
+			return err
+		}
+		if app.Spec.Kind != "memory" {
+			return model.Err("CONTROLLER_MODE", "Memory lifecycle commands require a memory deployment")
+		}
 	}
 	return s.performAction("/v1/apps/"+url.PathEscape(s.sub)+"/action", s.command, "Permanently purge this application's owned data? [y/N] ", "--purge requires delete")
 }

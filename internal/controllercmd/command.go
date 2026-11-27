@@ -25,6 +25,7 @@ type session struct {
 
 const helpText = `Hostlier controller
 Usage: hostlier-controller run [options]
+       hostlier-controller run --mode memory --memory-root EXISTING_DIRECTORY [--config FILE] (macOS or Linux)
        hostlier-controller connect MASTER_URL_OR_PROFILE
        hostlier-controller init --domain DOMAIN [--master-fingerprint SHA256] [--dry-run] [--yes] [--runtime auto|docker|k3s] [--proxy MODE]
        hostlier-controller update [--dry-run] [--yes] [--state-dir DIR] [--config FILE]
@@ -36,7 +37,7 @@ Usage: hostlier-controller run [options]
        hostlier-controller agent run --controller-fingerprint SHA256 [options]
        hostlier-controller backup --output FILE [--state-dir DIR --config FILE]
        hostlier-controller restore --input FILE --source-stopped --state-dir DIR
-Options: --state-dir --config --runtime --proxy --hostname --controller-hostname
+Options: --state-dir --config --runtime --mode --memory-root --proxy --hostname --controller-hostname
          --host --port --socket --log-path --auth-config --data-config
          --controller-fingerprint --tunnel-domain --tunnel-url
 `
@@ -127,7 +128,7 @@ func (s *session) parse(args []string, errOut io.Writer) error {
 	flags.SetOutput(errOut)
 	values := map[string]*string{}
 	// Each value is loaded into the daemon session after successful parsing.
-	for _, name := range strings.Fields("state-dir config runtime proxy hostname controller-hostname host port socket log-path auth-config data-config controller-fingerprint master-fingerprint output input tunnel-domain tunnel-url url request name") {
+	for _, name := range strings.Fields("state-dir config runtime mode memory-root proxy hostname controller-hostname host port socket log-path auth-config data-config controller-fingerprint master-fingerprint output input tunnel-domain tunnel-url url request name") {
 		values[name] = flags.String(name, "", name)
 	}
 	flags.Bool("json", false, "emit JSON status (default)")

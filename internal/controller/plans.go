@@ -10,6 +10,9 @@ import (
 
 // makePlan resolves immutable deployment inputs without changing the runtime.
 func (c *Controller) makePlan(r *http.Request, actor string) (any, error) {
+	if c.opts.Runtime.Name() == "memory" {
+		return c.makeMemoryPlan(r, actor)
+	}
 	spec, exact, err := c.planSpecification(r)
 	// Stop planning when immutable runtime inputs cannot be resolved.
 	if err != nil {
@@ -100,7 +103,7 @@ func (c *Controller) applyPlan(r *http.Request, id, actor string) (any, error) {
 		return nil, model.Err("STALE_PLAN", "Plan expired or server changed; review new plan")
 	}
 	// Recheck public route reservations only for application deployments.
-	if !resourcePlanKind(plan.Kind) {
+	if !resourcePlanKind(plan.Kind) && plan.Spec.Kind != "memory" {
 		// Preserve route reservations held by other active or accepted applications.
 		if _, err := c.routeFree(plan.Spec); err != nil {
 			return nil, err
@@ -113,6 +116,7 @@ func (c *Controller) applyPlan(r *http.Request, id, actor string) (any, error) {
 		name = plan.ResourceSpec.Name
 	}
 	op := &Operation{Workflow: plan.Workflow, RestoreBackupID: plan.RestoreBackupID, Dependencies: plan.Dependencies, ResourceSpec: plan.ResourceSpec, ID: random(), Kind: kind, Name: name, Spec: plan.Spec, SecretRefs: plan.SecretRefs, Status: "queued", PlanID: plan.ID, Fingerprint: plan.Fingerprint, Actor: actor}
+	op.MemorySources = plan.MemorySources
 	plan.OperationID = op.ID
 	plan.RequestID = b.RequestID
 	return c.acceptOperation(op)

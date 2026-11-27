@@ -187,6 +187,10 @@ jobs:
           (cd dist/releases && shasum -a 256 "$binary" > "$binary.sha256")
           (cd dist/releases && shasum -a 256 -c "$binary.sha256")
           "dist/releases/$binary" help
+      - name: Test native macOS memory controller
+        env:
+          HOSTLIER_TEST_DISK_IMAGE: '1'
+        run: go test -race ./internal/memory ./internal/controller ./internal/controllercmd -run Memory -count=1
       - name: Upload macOS controller and checksum
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
@@ -200,7 +204,7 @@ jobs:
 
   publish:
     name: Publish verified controller release
-    needs: controller
+    needs: [controller, mac-controller]
     if: startsWith(github.ref, 'refs/tags/v') && github.repository == 'Hostlier/hostlier'
     runs-on: ubuntu-24.04
     permissions:
@@ -219,12 +223,16 @@ jobs:
         run: |
           gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name hostlier-controller-linux-amd64 --dir release-assets
           gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name hostlier-controller-linux-arm64 --dir release-assets
-      - name: Verify both release checksums
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name hostlier-controller-darwin-amd64 --dir release-assets
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name hostlier-controller-darwin-arm64 --dir release-assets
+      - name: Verify release checksums
         run: |
           cd release-assets
           sha256sum -c hostlier-controller-linux-amd64.tar.gz.sha256
           sha256sum -c hostlier-controller-linux-arm64.tar.gz.sha256
+          sha256sum -c hostlier-controller-darwin-amd64.sha256
+          sha256sum -c hostlier-controller-darwin-arm64.sha256
       - name: Publish a tagged GitHub Release
         run: |
           [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || { echo 'Expected a vMAJOR.MINOR.PATCH tag'; exit 1; }
-          gh release create "$GITHUB_REF_NAME" release-assets/hostlier-controller-linux-*.tar.gz release-assets/hostlier-controller-linux-*.tar.gz.sha256 --repo "$GITHUB_REPOSITORY" --verify-tag --latest --generate-notes
+          gh release create "$GITHUB_REF_NAME" release-assets/hostlier-controller-linux-*.tar.gz release-assets/hostlier-controller-linux-*.tar.gz.sha256 release-assets/hostlier-controller-darwin-* --repo "$GITHUB_REPOSITORY" --verify-tag --latest --generate-notes

@@ -7,6 +7,9 @@ import (
 
 // validateDeploymentRuntime rejects unsupported replica settings before any package planning.
 func (c *Controller) validateDeploymentRuntime(spec model.Project) error {
+	if (spec.Kind == "memory") != (c.opts.Runtime.Name() == "memory") {
+		return model.Err("CONTROLLER_MODE", "Memory projects require a memory controller; memory controllers cannot deploy applications")
+	}
 	// Delegation is limited to the native Kubernetes autoscaler.
 	if spec.Autoscaling != nil && c.opts.Runtime.Name() != "k3s" {
 		return model.Err("AUTOSCALING_RUNTIME", "Autoscaling requires k3s")

@@ -135,6 +135,12 @@ func ParseRoute(value string, domains []string, reservedHost string) (model.Rout
 
 // ValidateProject validates and normalizes a project in declaration order.
 func ValidateProject(p model.Project) (model.Project, error) {
+	if p.Kind == "memory" {
+		return validateMemoryProject(p)
+	}
+	if p.Kind != "" || len(p.Exports) != 0 {
+		return p, invalid("Exports require kind: memory")
+	}
 	var err error
 	p, err = normalizeWorkload(p)
 	// Reject invalid v2 topology before running shared value validators.

@@ -83,6 +83,7 @@ func New(o Options) (*Controller, error) {
 
 // initializeServices prepares identities and durable recovery before starting controller-owned workers.
 func (c *Controller) initializeServices() error {
+	c.initializeMemory()
 	// Validate reserved tunnel authority before starting any workers.
 	if err := c.initializeTunnels(); err != nil {
 		return err
@@ -137,6 +138,9 @@ func (c *Controller) Address() string { c.mu.Lock(); defer c.mu.Unlock(); return
 func (c *Controller) Listen(o ListenOptions) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.opts.Runtime.Name() == "memory" && (o.MasterFingerprint != "" || o.ControllerFingerprint != "") {
+		return model.Err("CONTROLLER_MODE", "Memory controllers cannot expose or join a fleet listener")
+	}
 	// Reject a second listener setup on the same controller.
 	if len(c.listeners) > 0 {
 		return errors.New("already listening")
@@ -615,7 +619,11 @@ func (c *Controller) interruptPendingOperations() {
 func (c *Controller) serveListeners(listeners []net.Listener, handlers []http.Handler) {
 	// Apply listener lifecycle handling to every prepared endpoint.
 	for i, l := range listeners {
-		server := &http.Server{Handler: handlers[i], ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: c.opts.WriteTimeout, MaxHeaderBytes: 16384}
+		readTimeout := 30 * time.Second
+		if c.opts.Runtime.Name() == "memory" {
+			readTimeout = 10 * time.Minute
+		}
+		server := &http.Server{Handler: handlers[i], ReadHeaderTimeout: 10 * time.Second, ReadTimeout: readTimeout, WriteTimeout: c.opts.WriteTimeout, MaxHeaderBytes: 16384}
 		server.Protocols = new(http.Protocols)
 		server.Protocols.SetHTTP1(true)
 		server.Protocols.SetHTTP2(true)

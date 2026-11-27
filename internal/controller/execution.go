@@ -144,6 +144,9 @@ func (c *Controller) runtimeEvent(id string, event model.Event) {
 // executeDeployment resolves private dependency bindings before invoking the app runtime.
 func (c *Controller) executeDeployment(input operationInput, onEvent func(model.Event)) operationResult {
 	op := input.operation
+	if op.Spec.Kind == "memory" {
+		return c.executeMemoryDeployment(op)
+	}
 	workflowBindings, workflowErr := c.executeWorkflow(op)
 	// Package provisioning and output publication must complete before deploying the app.
 	if workflowErr != nil {
@@ -286,6 +289,7 @@ func (c *Controller) recordDeployment(op *Operation, result operationResult) {
 	revision := Revision{ResourceRefs: result.resourceRefs, ID: op.ID, Spec: op.Spec, SecretRefs: op.SecretRefs}
 	revisions = append(revisions, revision)
 	c.state.Applications[op.Name] = &Application{ProductPolicy: c.nextProductPolicy(op.Spec), ResourceRefs: result.resourceRefs, Deployment: deployment, Spec: op.Spec, SecretRefs: op.SecretRefs, Revision: op.ID, Revisions: revisions}
+	c.state.Applications[op.Name].MemorySources = op.MemorySources
 }
 
 // actionStatus maps lifecycle actions to their durable observed state.

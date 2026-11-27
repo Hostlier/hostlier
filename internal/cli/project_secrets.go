@@ -7,6 +7,7 @@ import (
 	"hostlier/internal/model"
 	"net/url"
 	"os"
+	"strings"
 )
 
 // projectSecret retains a resolved local snapshot only for this CLI invocation.
@@ -21,6 +22,17 @@ func (s *session) readProjectInput(namespace string) (model.Project, error) {
 	// Invalid input cannot cause partial secret uploads.
 	if err != nil {
 		return input.Project, err
+	}
+	if strings.HasPrefix(s.parsed.commandPath, "memory ") && input.Project.Kind != "memory" {
+		return input.Project, model.Err("CONTROLLER_MODE", "Memory commands require kind: memory")
+	}
+	if input.Project.Kind == "memory" {
+		if len(input.Secrets) != 0 {
+			return input.Project, model.Err("INVALID_CONFIG", "Memory projects cannot declare secrets")
+		}
+		if _, err := config.ValidateProject(input.Project); err != nil {
+			return input.Project, err
+		}
 	}
 	values := make([]projectSecret, 0, len(input.Secrets))
 	// Resolve every source before retaining the complete private snapshot.

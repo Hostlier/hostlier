@@ -223,6 +223,12 @@ func (c *Controller) routeAPI(r *http.Request, p []string, actor string) (any, e
 
 // routeAPIAction admits maintenance reservations before selecting the protected operation.
 func (c *Controller) routeAPIAction(r *http.Request, p []string, actor string) (any, error) {
+	if c.opts.Runtime.Name() == "memory" && !memoryAPISurface(p[1]) {
+		return nil, model.Err("CONTROLLER_MODE", "This capability is unavailable on a memory controller")
+	}
+	if p[1] == "memory" {
+		return c.apiMemory(r, p, actor)
+	}
 	// Accepted workload mutations cannot race the detached controller installer.
 	if err := c.checkMaintenanceMutation(r); err != nil {
 		return nil, err
@@ -364,7 +370,7 @@ func (c *Controller) authorizeDispatch(r *http.Request, p []string, public, loca
 
 // servePublicSurface separates static and narrowly authenticated registry traffic from management APIs.
 func (c *Controller) servePublicSurface(w http.ResponseWriter, r *http.Request, local bool) bool {
-	return c.serveTunnel(w, r, local) || c.serveFusedCallback(w, r) || c.serveAccessPage(w, r) || c.serveCollectorRegistry(w, r)
+	return c.serveMemory(w, r) || c.serveTunnel(w, r, local) || c.serveFusedCallback(w, r) || c.serveAccessPage(w, r) || c.serveCollectorRegistry(w, r)
 }
 
 // verifyClientAccess binds a signed request to both its device identity and deployment scope.

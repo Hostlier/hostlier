@@ -64,6 +64,7 @@ the [controller gRPC route](STREAMING.md) over HTTP/2.
 - [Deploy and update apps](docs/guides/deploy.md)
 - [Private images](docs/guides/private-images.md)
 - [Databases and storage](docs/guides/databases.md)
+- [Memory controllers and native shared storage](docs/guides/memory.md)
 - [Minion apps](docs/guides/minion.md)
 - [All guides](GUIDE.md)
 

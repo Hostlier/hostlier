@@ -158,6 +158,9 @@ func (c *Controller) humanReview(request humanRequest, actor string) (json.RawMe
 		}
 	}
 	review["changes"] = public
+	if strings.HasPrefix(request.Path, "/v1/memory/") {
+		c.memoryReview(request, review)
+	}
 	c.addRecoveryReview(request, review)
 	c.addTunnelReview(request, review)
 	// Apply this check before granting authority or advancing protocol state.

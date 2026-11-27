@@ -14,6 +14,7 @@ type helpEntry struct {
 
 // rootCommands expose domains; individual application and administration actions live below them.
 var rootCommands = []helpEntry{
+	{"memory", "Deploy and mount confined host storage"},
 	{"init", "Create an app deployment configuration"},
 	{"app", "Deploy and manage applications"},
 	{"minion", "Build and test deterministic apps"},
@@ -82,6 +83,23 @@ var commandGroups = map[string][]helpEntry{
 
 // routeArguments normalizes grouped commands before approval, positional checks and dispatch.
 func routeArguments(parsed arguments) (arguments, error) {
+	if len(parsed.args) > 0 && parsed.args[0] == "memory" {
+		if parsed.flags["on"] != "" && parsed.flags["on"] != "local" {
+			return parsed, model.Err("ARGUMENTS", "Connect directly to the memory controller")
+		}
+		if len(parsed.args) == 1 {
+			parsed.flags["help"] = "true"
+		}
+	}
+	if len(parsed.args) >= 2 && parsed.args[0] == "memory" {
+		switch parsed.args[1] {
+		case "validate", "plan", "deploy", "update", "status", "stop", "start", "restart", "delete":
+			parsed.commandPath = "memory " + parsed.args[1]
+			parsed.args = parsed.args[1:]
+			return parsed, nil
+		}
+	}
+
 	offset := 0
 	// Explicit help uses the same command tree as the --help flag.
 	if len(parsed.args) > 0 && parsed.args[0] == "help" {
