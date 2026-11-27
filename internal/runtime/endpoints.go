@@ -4,8 +4,10 @@ import (
 	"context"
 	"hostlier/internal/model"
 	"net"
+	"net/url"
 	"sort"
 	"strconv"
+	"strings"
 )
 
 // endpointPortBindings publishes every public listener on host loopback, never a wildcard address.
@@ -115,11 +117,38 @@ func (r *Runtime) publicEndpointsReady(ctx context.Context, p model.Project) err
 			continue
 		}
 		// Every HTTP route must present a valid certificate before the deployment is committed.
-		if err := r.publicReady(ctx, project.Route); err != nil {
+		target, health := publicReadinessTarget(p, project)
+		if err := r.publicProbeReady(ctx, target, health); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// publicReadinessTarget uses the primary's declared HTTP health path when its public route exposes it.
+// Other listeners and policy-protected routes retain reachability checks, including valid 401/404 responses.
+func publicReadinessTarget(primary, endpoint model.Project) (string, bool) {
+	// Validated v1 routes omit the scheme; v2 endpoints already carry canonical HTTPS URLs.
+	if !strings.Contains(endpoint.Route, "://") {
+		endpoint.Route = "https://" + endpoint.Route
+	}
+	if primary.Health == nil || primary.Health.Path == "" || endpoint.Port != primary.Port || model.HasTrafficPolicy(endpoint.Endpoint) {
+		return endpoint.Route, false
+	}
+	target, err := url.Parse(endpoint.Route)
+	if err != nil {
+		return endpoint.Route, false
+	}
+	prefix := strings.TrimRight(target.Path, "/")
+	path := primary.Health.Path
+	if endpoint.Proxy != nil && endpoint.Proxy.StripPrefix {
+		path = prefix + path
+	} else if prefix != "" && path != prefix && !strings.HasPrefix(path, prefix+"/") {
+		return endpoint.Route, false
+	}
+	target.Path = path
+	target.RawPath = ""
+	return target.String(), true
 }
 
 // validateEndpointRoutes reserves every named public address before touching workload processes.

@@ -127,29 +127,63 @@ func (r *Runtime) publishCaddy(ctx context.Context, s state, build func(appRecor
 
 // publicReady verifies certificate-valid HTTPS before committing application readiness.
 func (r *Runtime) publicReady(ctx context.Context, target string) error {
+	return r.publicProbeReady(ctx, target, false)
+}
+
+// publicProbeReady requires sustained responses on new connections while the edge and Service converge.
+func (r *Runtime) publicProbeReady(ctx context.Context, target string, health bool) error {
 	// Explicit local test environments may bypass the external HTTPS gate.
 	if target == "" || r.options.SkipPublicHTTPSProbe {
 		return nil
 	}
-	deadline := time.Now().Add(r.options.HealthTimeout)
+	ctx, stop := context.WithTimeout(ctx, r.options.HealthTimeout)
+	defer stop()
+	client := *r.web
+	// A redirect to a login page or another host does not prove this route is healthy.
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	// Reusing a connection can keep probing a retiring proxy worker after a reload.
+	transport := client.Transport
+	if transport == nil {
+		transport = http.DefaultTransport
+	}
+	if base, ok := transport.(*http.Transport); ok {
+		fresh := base.Clone()
+		fresh.DisableKeepAlives = true
+		client.Transport = fresh
+		defer fresh.CloseIdleConnections()
+	}
+	consecutive := 0
 	// Retry certificate issuance and public routing within the configured readiness window.
-	for time.Now().Before(deadline) {
+	for ctx.Err() == nil {
 		probe, cancel := context.WithTimeout(ctx, 3*time.Second)
-		req, _ := http.NewRequestWithContext(probe, "GET", target, nil)
-		res, e := r.web.Do(req)
+		req, err := http.NewRequestWithContext(probe, "GET", target, nil)
+		if err != nil {
+			cancel()
+			return err
+		}
+		req.Close = true
+		res, e := client.Do(req)
 		ok := e == nil && res.StatusCode < 500
+		if ok && health {
+			ok = res.StatusCode >= 200 && res.StatusCode < 300
+		}
 		// Inspect HTTPS status only when TLS and the HTTP request completed.
 		if e == nil {
 			res.Body.Close()
 		}
 		cancel()
-		// Accept a reachable application response below the server-error range.
+		// One successful request can race a retiring Pod or asynchronous edge reload.
 		if ok {
-			return nil
+			consecutive++
+			if consecutive == 3 {
+				return nil
+			}
+		} else {
+			consecutive = 0
 		}
 		// Honor cancellation while waiting for certificate or public-route readiness.
 		if e = pause(ctx, 500*time.Millisecond); e != nil {
-			return e
+			break
 		}
 	}
 	return model.Err("HTTPS_NOT_READY", "HTTPS not ready; verify DNS, certificate validation and external TCP 80/443")

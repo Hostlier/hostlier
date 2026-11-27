@@ -369,11 +369,11 @@ func (k *K3s) Action(ctx context.Context, name, action string, ac model.ActionCo
 	if err := k.fencedLifecycleAction(ctx, name, namespace, action, app, s, ac); err != nil {
 		return err
 	}
-	return k.commitLifecycle(ctx, action, app.URL, s)
+	return k.commitLifecycle(ctx, action, app.Spec, s)
 }
 
 // commitLifecycle publishes routing and verifies usable HTTPS before persisting a lifecycle transition.
-func (k *K3s) commitLifecycle(ctx context.Context, action, target string, s state) error {
+func (k *K3s) commitLifecycle(ctx context.Context, action string, spec model.Project, s state) error {
 	// Keep routing consistent with the resulting running or stopped status.
 	if e := k.base.caddy(ctx, s); e != nil {
 		return e
@@ -381,7 +381,7 @@ func (k *K3s) commitLifecycle(ctx context.Context, action, target string, s stat
 	// Rollout readiness can precede service endpoint propagation; verify the active HTTPS route before success.
 	if action == "start" || action == "restart" {
 		// Preserve durable status when the routed workload remains unavailable.
-		if e := k.base.publicReady(ctx, target); e != nil {
+		if e := k.base.publicEndpointsReady(ctx, spec); e != nil {
 			return e
 		}
 	}
