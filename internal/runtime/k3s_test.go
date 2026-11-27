@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"hostlier/internal/artifact"
 	"hostlier/internal/model"
 )
 
@@ -17,6 +18,10 @@ func TestK3sManifestIsolation(t *testing.T) {
 		t.Fatal(e)
 	}
 	k := adapter.(*K3s)
+	// The Kubernetes backend uses its own client and needs no standalone engine transport.
+	if k.base.docker != nil || k.base.options.SocketPath != "" {
+		t.Fatal("K3s initialized an unused standalone engine transport")
+	}
 	spec := model.Project{Name: "app", Image: "image@sha256:" + strings.Repeat("a", 64), Port: 3000, Route: "app.example.com", Resources: &model.Limits{CPU: "0.5", Memory: "512Mi"}, Volumes: map[string]model.Volume{"data": {Mount: "/data", Size: "5Gi"}}}
 	manifests, e := k.K3sManifests(spec, model.DeployContext{OperationID: "approved-op", Secrets: map[string]string{"API_KEY": "fixture-secret"}, DependencyNetworks: []string{"hostlier-" + k.base.owner + "-resource-db"}})
 	// Require manifest generation for an approved immutable application.
@@ -45,6 +50,27 @@ func TestK3sManifestIsolation(t *testing.T) {
 	// Reject egress binding to an unowned resource namespace.
 	if _, e = k.K3sManifests(spec, model.DeployContext{OperationID: "op", DependencyNetworks: []string{"unowned-resource"}}); e == nil {
 		t.Fatal("unowned dependency accepted")
+	}
+}
+
+func TestK3sLegacyPlanUsesImportedImage(t *testing.T) {
+	adapter, err := New(Options{Type: "k3s", StateDir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	image := "hostlier.local/artifacts@sha256:" + strings.Repeat("a", 64)
+	spec := model.Project{Version: 1, Name: "app", Image: image, Port: 80, Route: "app.example.com"}
+	manifests, err := adapter.(*K3s).K3sManifests(spec, model.DeployContext{OperationID: "approved-op"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.Marshal(manifests)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `"image":"`+artifact.RuntimeImage(image)+`"`) ||
+		!strings.Contains(string(data), `"imagePullPolicy":"Never"`) {
+		t.Fatal("legacy manifest would pull a locally imported artifact from the network")
 	}
 }
 

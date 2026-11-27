@@ -85,7 +85,7 @@ func (s *session) clients() error {
 	if s.sub == "revoke" && s.target != "" {
 		var result any
 		// Require the controller to accept this request before advancing the command workflow.
-		if e = s.request("POST", "/v1/clients/"+url.PathEscape(s.target)+"/revoke", nil, &result); e != nil {
+		if e = s.request("POST", "/v1/clients/"+url.PathEscape(s.target)+"/revoke", map[string]any{}, &result); e != nil {
 			return e
 		}
 		return s.print(result)

@@ -290,13 +290,17 @@ func TestNFTOpaqueRuleCannotHideUnrelatedDrop(t *testing.T) {
 	}
 }
 
-// A direct install pins only the fleet listener, and subsequent init keeps the master.
+// Reinstallation preserves both the pinned master and its outbound endpoint.
 func TestMasterFingerprintInstallation(t *testing.T) {
 	pin := strings.Repeat("a", 64)
-	opts := resolveDetectedOptions(Options{Domain: "apps.example.com"}, &Installation{MasterFingerprint: pin}, hostDetection{})
+	opts := resolveDetectedOptions(Options{Domain: "apps.example.com"}, &Installation{MasterFingerprint: pin, MasterURL: "https://master.example.com:7464"}, hostDetection{})
 	assets, err := InstallationAssets(opts)
-	if err != nil || !strings.Contains(assets.Service, "--host 127.0.0.1 --port 7463 --master-fingerprint "+pin) {
+	if err != nil || !strings.Contains(assets.Service, "--host 127.0.0.1 --port 7463 --master-fingerprint "+pin+" --master-url https://master.example.com:7464") {
 		t.Fatal(assets.Service, err)
+	}
+	explicit := resolveDetectedOptions(Options{Domain: "apps.example.com", MasterFingerprint: pin}, &Installation{MasterFingerprint: pin, MasterURL: "https://master.example.com:7464"}, hostDetection{})
+	if explicit.MasterURL != opts.MasterURL {
+		t.Fatal("explicit matching pin erased master endpoint")
 	}
 	opts.MasterFingerprint = "oops"
 	if _, err := InstallationAssets(opts); err == nil {

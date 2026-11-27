@@ -4,6 +4,7 @@ package nginx
 import (
 	"fmt"
 	"net"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -148,19 +149,11 @@ func hostServer(o Options, host, controller, upstream string, routes []Route) (s
 	}
 	// The reserved controller route also supports streamed events and upgraded requests.
 	if host == controller {
-		// Give only digest chunk URLs room for a base64-encoded 1 MiB chunk.
-		// Set an explicit cap for other routes even if the host has a larger default.
-		text += " client_max_body_size 1m;\n"
-		location, err := proxyLocation("/", false, []string{upstream})
+		locations, err := controllerLocations(o, upstream)
 		if err != nil {
 			return "", err
 		}
-		artifactLocation := strings.Replace(location, "location ^~ / {", `location ~ "^/v1/artifacts/[a-f0-9]{64}/chunks$" { client_max_body_size 2m;`, 1)
-		// A normal prefix lets Nginx choose the exact chunk regex first.
-		location = strings.Replace(location, "location ^~ / {", "location / {", 1)
-		// The protobuf envelope adds a few bytes to the largest 2 MiB JSON request.
-		rpc := fmt.Sprintf(" location ^~ %s { client_max_body_size 3m; grpc_pass grpc://%s; grpc_set_header Host $host; grpc_read_timeout 600s; grpc_send_timeout 600s; }\n", controledge.RPCPrefix, upstream)
-		return text + rpc + gatewayForwardedScheme(artifactLocation+location, o.Gateway) + " }\n", nil
+		return text + locations + " }\n", nil
 	}
 	// Order specific routes before their parent locations.
 	sort.Slice(routes, func(i, j int) bool { return len(routes[i].Project.Route) > len(routes[j].Project.Route) })
@@ -183,6 +176,52 @@ func hostServer(o Options, host, controller, upstream string, routes []Route) (s
 		}
 	}
 	return text + " location / { return 404; }\n }\n", nil
+}
+
+// controllerLocations uses single vhost inheritance when the operator sets a limit.
+func controllerLocations(o Options, upstream string) (string, error) {
+	limit, err := controllerBodyLimit(o.ControllerBodyLimitFile)
+	if err != nil {
+		return "", err
+	}
+	location, err := proxyLocation("/", false, []string{upstream})
+	if err != nil {
+		return "", err
+	}
+	rpcLimit := ""
+	if limit == "" {
+		limit = "1m"
+		artifact := strings.Replace(location, "location ^~ / {", `location ~ "^/v1/artifacts/[a-f0-9]{64}/chunks$" { client_max_body_size 2m;`, 1)
+		planning := strings.Replace(location, "location ^~ / {", `location ~ "^/v1/(hosts/[^/]+/proxy/)?(plans|planning)$" { client_max_body_size 2m;`, 1)
+		location = artifact + planning + strings.Replace(location, "location ^~ / {", "location / {", 1)
+		// The protobuf envelope adds bytes to the largest 2 MiB JSON request.
+		rpcLimit = " client_max_body_size 3m;"
+	}
+	rpc := fmt.Sprintf(" location ^~ %s {%s grpc_pass grpc://%s; grpc_set_header Host $host; grpc_read_timeout 600s; grpc_send_timeout 600s; }\n", controledge.RPCPrefix, rpcLimit, upstream)
+	return " client_max_body_size " + limit + ";\n" + rpc + gatewayForwardedScheme(location, o.Gateway), nil
+}
+
+// controllerBodyLimit reads an optional integer MiB value from the operator's file.
+func controllerBodyLimit(path string) (string, error) {
+	if path == "" {
+		path = "/etc/hostlier/nginx-controller-body-limit-mib"
+	}
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	// The largest representable value must fit a signed 64-bit byte count.
+	limit, err := strconv.ParseUint(strings.TrimSpace(string(data)), 10, 43)
+	if err != nil {
+		return "", fmt.Errorf("%s must contain a non-negative integer body limit in MiB", path)
+	}
+	if limit == 0 {
+		return "0", nil
+	}
+	return strconv.FormatUint(limit, 10) + "m", nil
 }
 
 // renderRoute preserves exact typed protocol paths and independently matched descendants.

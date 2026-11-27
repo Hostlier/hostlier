@@ -1,11 +1,16 @@
 package controller
 
 import "hostlier/internal/fleet"
+import "hostlier/internal/model"
 
 // State contains the versioned durable controller data protected by the state lock.
 type State struct {
+	SwarmVersion          int                              `json:"swarmVersion,omitempty"`
+	Swarms                map[string]model.Swarm           `json:"swarms,omitempty"`
 	MemoryGrants          map[string]*MemoryGrant          `json:"memoryGrants,omitempty"`
+	FleetJoins            map[string]*FleetJoin            `json:"fleetJoins,omitempty"`
 	ControllerUpdateID    string                           `json:"controllerUpdateId,omitempty"`
+	MasterURL             string                           `json:"masterURL,omitempty"`
 	MasterFingerprint     *string                          `json:"masterFingerprint,omitempty"`
 	TunnelGatewayDomain   string                           `json:"tunnelGatewayDomain,omitempty"`
 	TunnelGatewayURL      string                           `json:"tunnelGatewayUrl,omitempty"`

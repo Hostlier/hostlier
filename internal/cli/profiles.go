@@ -40,6 +40,8 @@ func (s *session) server() error {
 	switch s.sub {
 	case "ssh":
 		return s.serverSSH()
+	case "approve":
+		return s.approveServer()
 	case "join":
 		return s.joinMaster()
 	case "add":

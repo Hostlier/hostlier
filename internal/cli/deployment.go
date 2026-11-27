@@ -26,6 +26,11 @@ func (s *session) deploy() error {
 
 // reviewDeployment submits the immutable deployment to the same controller review for all sources.
 func (s *session) reviewDeployment(spec model.Project, revision string) error {
+	var err error
+	spec, err = s.selectProjectSwarm(spec)
+	if err != nil {
+		return err
+	}
 	spec, source, err := s.deploymentRoute(spec)
 	// Stop planning when deployment inputs or their route cannot be resolved.
 	if err != nil {
@@ -80,6 +85,11 @@ func (s *session) deploymentSpecFor(minion *minionDeployment) (model.Project, st
 
 // prepareDeploymentProject validates before preparing and uploading any local sources.
 func (s *session) prepareDeploymentProject(p model.Project) (model.Project, error) {
+	var selectionErr error
+	p, selectionErr = s.selectProjectSwarm(p)
+	if selectionErr != nil {
+		return p, selectionErr
+	}
 	if p.Kind == "memory" {
 		return config.ValidateProject(p)
 	}

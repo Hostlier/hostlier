@@ -54,6 +54,9 @@ func (c *Controller) proposeHumanRequest(r *http.Request, actor string) (any, er
 	if err := validateHumanRequest(request); err != nil {
 		return nil, err
 	}
+	if err := c.checkControlPlaneRoute(strings.SplitN(request.Path, "/", 4)[2]); err != nil {
+		return nil, err
+	}
 	c.expireHumanApprovals()
 	if approval, err := c.recentCompletedSecretApproval(request, actor); err != nil {
 		return nil, err
@@ -116,7 +119,7 @@ func (c *Controller) recordHumanRequest(request humanRequest, actor string) (any
 	a := &HumanApproval{ID: random(), Code: strings.ToUpper(random()[:16]), Actor: actor, Method: request.Method, Path: request.Path, Payload: payload, Fingerprint: c.store.Authenticate(actor + "|" + c.state.Hostname + "|" + string(data)), Generation: c.state.Generation, ExpiresAt: c.opts.Now().Add(10 * time.Minute).UnixMilli(), Status: "pending", Review: review}
 	c.applyAuthorization(a, request)
 	// A scoped credential must never escalate to an unrestricted owner ceremony.
-	if a.Status == "pending" && (c.scopedClient(actor) || !c.humanEnrolled()) {
+	if a.Status == "pending" && (c.scopedClient(actor) || !c.humanEnrolled() || fleetJoinApproval(request.Method, request.Path)) {
 		return nil, model.Err("SCOPE_DENIED", "Request exceeds this deployment credential; obtain a new explicit grant")
 	}
 	c.state.HumanApprovals[a.ID] = a
@@ -151,7 +154,7 @@ func (c *Controller) humanReview(request humanRequest, actor string) (json.RawMe
 	}
 	public := map[string]json.RawMessage{}
 	// Expose only known nonsecret intent fields; all unknown fields remain private.
-	for _, key := range []string{"bridgeId", "target", "connections", "engineUrl", "clientId", "clientSecretRef", "familyId", "secretName", "tokenName", "allow", "action", "purge", "name", "domain", "role", "host", "url", "fingerprint", "approved", "device", "apps", "appPrefix", "maxApps", "routeDomain", "keepApps", "secrets", "scope", "durationSeconds", "maxUses", "resource", "destination", "destinationFingerprint", "everySeconds", "retain", "to", "objectKey"} {
+	for _, key := range []string{"bridgeId", "target", "connections", "engineUrl", "clientId", "clientSecretRef", "familyId", "secretName", "tokenName", "allow", "action", "purge", "name", "domain", "role", "host", "url", "fingerprint", "approved", "device", "apps", "actions", "swarm", "from", "appPrefix", "maxApps", "routeDomain", "keepApps", "secrets", "scope", "durationSeconds", "maxUses", "resource", "destination", "destinationFingerprint", "everySeconds", "retain", "to", "objectKey"} {
 		// Retain exact JSON values without interpreting markup or instructions.
 		if value, exists := body[key]; exists {
 			public[key] = value
@@ -166,6 +169,16 @@ func (c *Controller) humanReview(request humanRequest, actor string) (json.RawMe
 	// Apply this check before granting authority or advancing protocol state.
 	if _, _, ok := model.FleetPath(request.Path); ok {
 		return c.reviewHostIntent(request, actor, review)
+	}
+	if len(parts) >= 3 && parts[1] == "apps" {
+		review["swarmId"] = c.appSwarmID(parts[2])
+	}
+	if len(parts) >= 3 && parts[1] == "swarms" {
+		group, err := c.swarm(parts[2])
+		if err != nil {
+			return nil, err
+		}
+		review["swarm"] = group
 	}
 	return json.Marshal(review)
 }

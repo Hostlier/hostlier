@@ -1,9 +1,11 @@
 package controller
 
 import (
-	"hostlier/internal/model"
+	"context"
 	"strings"
 	"testing"
+
+	"hostlier/internal/model"
 )
 
 // TestSecondaryEndpointReservationsIncludePendingOperations guards gRPC routes independently of primary HTTP URLs.
@@ -49,10 +51,22 @@ func TestPlanAcceptsBoundedEscapedConfiguration(t *testing.T) {
 	p.Version = 2
 	p.Source = &model.Source{Image: p.Image}
 	p.Endpoint = &model.Endpoint{Exposure: "public", Port: p.Port, Route: p.Route}
-	p.Configs = map[string]model.ConfigFile{"one": {Mount: "/app/one", Content: strings.Repeat("\x01", 65536)}, "two": {Mount: "/app/two", Content: strings.Repeat("\x02", 65536)}}
-	status, out := call(t, c, true, "POST", "/v1/plans", map[string]any{"spec": p}, "")
-	// JSON escaping expands these inputs beyond the old 128 KiB request limit.
+	p.Configs = map[string]model.ConfigFile{}
+	for _, name := range []string{"one", "two", "three", "four"} {
+		p.Configs[name] = model.ConfigFile{Mount: "/app/" + name, Content: strings.Repeat("\x01", 65536)}
+	}
+	body := map[string]any{"spec": p}
+	// The full 256 KiB config bundle expands past the ordinary 1 MiB HTTP limit.
+	status, out := call(t, c, true, "POST", "/v1/plans", body, "")
 	if status != 200 {
 		t.Fatalf("plan status=%d response=%v", status, out)
+	}
+	api, _, _ := pairedScopeFixture(t, c, deploymentScope{Apps: []string{p.Name}, DurationSeconds: 3600, MaxUses: 2})
+	var plan Plan
+	if err := api.Request(context.Background(), "POST", "/v1/plans", body, &plan); err != nil {
+		t.Fatal(err)
+	}
+	if plan.ID == "" || plan.Spec.Configs["four"].Content != p.Configs["four"].Content {
+		t.Fatal("signed deployment plan did not retain the full config bundle")
 	}
 }

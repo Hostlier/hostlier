@@ -129,7 +129,7 @@ func (c *Controller) queueAppAction(app *Application, action string, purge bool,
 	if err := c.validateProviderAction(app, action); err != nil {
 		return nil, err
 	}
-	op := &Operation{ID: random(), Kind: "action", Name: app.Name, Action: action, Purge: purge, Status: "queued", Actor: actor}
+	op := &Operation{SwarmID: c.appSwarmID(app.Name), ID: random(), Kind: "action", Name: app.Name, Action: action, Purge: purge, Status: "queued", Actor: actor}
 	return c.acceptOperation(op)
 }
 

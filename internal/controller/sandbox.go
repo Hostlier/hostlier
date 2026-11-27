@@ -67,6 +67,7 @@ func grantCoversApp(g *Authorization, name string) bool {
 
 // grantCanDeploy admits exact names, or prefixed names that are new or owned by this device's sandbox.
 func (c *Controller) grantCanDeploy(g *Authorization, name string) bool {
+	if !grantSwarmMatches(g,c.appSwarmID(name)) { return false }
 	// Exact-name windows keep their original matching.
 	if containsName(g.Apps, name) {
 		return true
@@ -179,7 +180,7 @@ func (c *Controller) applySandboxAction(a *HumanApproval, request humanRequest) 
 	// The first matching live sandbox supplies provenance.
 	for _, g := range c.state.Authorizations {
 		// Ownership, device, host and liveness must all hold.
-		if g.Device != a.Actor || g.Host != host || !sandboxOwned(g, name) || !c.authorizationLive(g) {
+		if g.Device != a.Actor || g.Host != host || !sandboxOwned(g, name) || !grantSwarmMatches(g,c.appSwarmID(name)) || !c.authorizationLive(g) {
 			continue
 		}
 		// Remote hosts remain pinned to the enrolled identity.
@@ -265,7 +266,7 @@ func (c *Controller) teardownSandbox(g *Authorization) bool {
 			continue
 		}
 		// Removed or already deleted apps need no work.
-		if app == nil || app.Status == "deleted" {
+		if app == nil || app.Status == "deleted" || !grantSwarmMatches(g,c.appSwarmID(name)) {
 			continue
 		}
 		// A rejected delete is retried on the next sweep.

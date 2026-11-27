@@ -129,7 +129,7 @@ func publicRPCError(err error) error {
 // job failure. Let clients reopen the same watch once the controller returns.
 func watchRPCError(err error) error {
 	var failure *model.Error
-	if errors.As(err, &failure) && failure.Code == "UNAVAILABLE" {
+	if errors.As(err, &failure) && (failure.Code == "UNAVAILABLE" || failure.Code == "HOST_UNAVAILABLE") {
 		return connect.NewError(connect.CodeUnavailable, errors.New(failure.Message))
 	}
 	return publicRPCError(err)

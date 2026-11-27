@@ -66,6 +66,6 @@ For unsupported packaging, keep an explicit Dockerfile or provide an image and a
 
 ## Docker and K3s servers
 
-The generated `.hostlier` model works with both Hostlier runtimes. Init does not choose a runtime: the connected server owns that choice. Install a K3s server with `hostlier-controller init --domain apps.example.com --runtime k3s`, then use the same init, validate, and deploy workflow from your laptop.
+The generated `.hostlier` model works with fresh K3s servers and existing Docker deployments. Use the same init, validate, and deploy workflow from your laptop for either server.
 
-Container recipes are built locally into a portable Linux image; Hostlier imports that image into Docker or K3s/containerd. Sidecars share the main app's network namespace on Docker and its pod on K3s. Independent apps keep private consumer declarations. Readiness commands, secret bindings, and named persistent mounts retain their deployment model. A local Docker builder is still required when building a container source for a K3s server. The default K3s local-path storage class records requested PVC size but does not enforce a disk quota.
+Build container recipes into portable Linux images using Docker Buildx or standalone BuildKit locally. Hostlier imports the image into the server's runtime. Sidecars share the main app's network namespace on Docker and its pod on K3s. Independent apps keep private consumer declarations. Readiness commands, secret bindings, and named persistent mounts retain their deployment model. The default K3s local-path storage class records requested PVC size without enforcing a disk quota.

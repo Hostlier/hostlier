@@ -15,20 +15,35 @@ func (s *session) pairingScope() (map[string]any, error) {
 		return scope, nil
 	}
 	// A supplied scope must not be ignored when deciding whether authority is unrestricted.
-	if mode, present := s.flags["scope"]; present && mode != "deploy" {
-		return nil, model.Err("ARGUMENTS", "Restricted pairing supports --scope deploy; omit all permission flags for all access")
+	if mode, present := s.flags["scope"]; present && mode != "deploy" && mode != "actions" {
+		return nil, model.Err("ARGUMENTS", "Restricted pairing supports --scope deploy or actions; omit all permission flags for all access")
 	}
 	duration, err := time.ParseDuration(s.flags["for"])
 	// Partial restrictions cannot silently escalate to full administrative authority.
-	if err != nil || duration < time.Minute || s.flags["app"] == "" {
-		return nil, model.Err("ARGUMENTS", "Restricted access requires --app APP and --for DURATION (1 minute–8 hours); omit all permission flags for all access")
+	if err != nil || duration < time.Minute || s.flags["app"] == "" && s.flags["actions"] == "" {
+		return nil, model.Err("ARGUMENTS", "Restricted access requires --app APP or --actions PERMISSIONS, and --for DURATION (1 minute–8 hours); omit all permission flags for all access")
 	}
 	uses, err := strconv.Atoi(defaultValue(s.flags["max-uses"], "20"))
 	// Numeric errors and explicit zero values must remain errors.
 	if err != nil || uses < 1 {
 		return nil, model.Err("ARGUMENTS", "Invalid maximum use count")
 	}
-	scope["apps"], scope["durationSeconds"], scope["maxUses"] = strings.Split(s.flags["app"], ","), int64(duration/time.Second), uses
+	if s.flags["scope"] == "actions" && s.flags["actions"] == "" || s.flags["scope"] == "deploy" && s.flags["actions"] != "" {
+		return nil, model.Err("ARGUMENTS", "Action permissions require --actions and --scope actions (or omit --scope)")
+	}
+	if s.flags["app"] != "" {
+		scope["apps"] = strings.Split(s.flags["app"], ",")
+	}
+	if s.flags["actions"] != "" {
+		scope["actions"] = strings.Split(s.flags["actions"], ",")
+	}
+	if s.flags["swarm"] != "" {
+		if s.flags["actions"] == "" {
+			return nil, model.Err("ARGUMENTS", "--swarm requires --actions")
+		}
+		scope["swarm"] = s.flags["swarm"]
+	}
+	scope["durationSeconds"], scope["maxUses"] = int64(duration/time.Second), uses
 	s.addPairingSecrets(scope)
 	return scope, nil
 }
@@ -47,7 +62,7 @@ func (s *session) addPairingSecrets(scope map[string]any) {
 // hasPairingRestrictions distinguishes omitted permission flags from explicit empty values.
 func (s *session) hasPairingRestrictions() bool {
 	// Each supported permission flag narrows the requested connection.
-	for _, name := range []string{"scope", "app", "secrets", "create-secrets", "for", "max-uses"} {
+	for _, name := range []string{"swarm", "actions", "scope", "app", "secrets", "create-secrets", "for", "max-uses"} {
 		// Flag presence is intentional even when its value is invalid.
 		if _, present := s.flags[name]; present {
 			return true

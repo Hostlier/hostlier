@@ -43,6 +43,7 @@ type Dependency struct {
 
 // Project is the shared .hostlier deployment contract used by CLI, controller and runtimes.
 type Project struct {
+	Swarm   string                  `json:"swarm,omitempty" yaml:"swarm,omitempty"`
 	Kind    string                  `json:"kind,omitempty" yaml:"kind,omitempty"`
 	Exports map[string]MemoryExport `json:"exports,omitempty" yaml:"exports,omitempty"`
 	// Packages holds per-package authoring settings; the CLI resolves each section against that package’s contract.

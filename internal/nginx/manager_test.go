@@ -29,10 +29,10 @@ func TestRenderSegmentRouting(t *testing.T) {
 	}
 }
 
-// TestControllerBodyLimit keeps base64-encoded artifact chunks below the edge cap.
+// TestControllerBodyLimit admits encoded artifacts and planning requests through either Nginx mode.
 func TestControllerBodyLimit(t *testing.T) {
 	for _, gateway := range []bool{false, true} {
-		options := Options{Gateway: gateway}
+		options := Options{Gateway: gateway, ControllerBodyLimitFile: filepath.Join(t.TempDir(), "body-limit")}
 		controller, err := hostServer(options, "controller.example.com", "controller.example.com", "127.0.0.1:7463", nil)
 		if err != nil {
 			t.Fatal(err)
@@ -41,9 +41,52 @@ func TestControllerBodyLimit(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !strings.Contains(controller, "client_max_body_size 1m;") || !strings.Contains(controller, `location ~ "^/v1/artifacts/[a-f0-9]{64}/chunks$" { client_max_body_size 2m;`) || !strings.Contains(controller, "location / {") || strings.Count(controller, "client_max_body_size 2m;") != 1 || strings.Contains(app, "client_max_body_size") {
-			t.Fatalf("gateway=%t: expected the larger limit only in the controller artifact location", gateway)
+		for _, directive := range []string{
+			"client_max_body_size 1m;",
+			`location ~ "^/v1/artifacts/[a-f0-9]{64}/chunks$" { client_max_body_size 2m;`,
+			`location ~ "^/v1/(hosts/[^/]+/proxy/)?(plans|planning)$" { client_max_body_size 2m;`,
+			"location / {",
+		} {
+			if !strings.Contains(controller, directive) {
+				t.Fatalf("gateway=%t: missing %q", gateway, directive)
+			}
 		}
+		if strings.Count(controller, "client_max_body_size 2m;") != 2 || strings.Contains(app, "client_max_body_size") {
+			t.Fatalf("gateway=%t: unexpected body limit outside controller payload routes", gateway)
+		}
+	}
+}
+
+// TestControllerBodyLimitOverride verifies one explicit limit applies to HTTP and RPC locations.
+func TestControllerBodyLimitOverride(t *testing.T) {
+	for _, tc := range []struct{ config, limit string }{
+		{"0\n", "0"},
+		{"32\n", "32m"},
+		{"1\n", "1m"},
+		{"-1\n", ""},
+		{"32m\n", ""},
+		{"\n", ""},
+	} {
+		t.Run(strings.TrimSpace(tc.config), func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "body-limit")
+			if err := os.WriteFile(path, []byte(tc.config), 0600); err != nil {
+				t.Fatal(err)
+			}
+			for _, gateway := range []bool{false, true} {
+				options := Options{Gateway: gateway, ControllerBodyLimitFile: path}
+				controller, err := hostServer(options, "controller.example.com", "controller.example.com", "127.0.0.1:7463", nil)
+				if tc.limit == "" {
+					if err == nil {
+						t.Fatalf("gateway=%t: invalid cap accepted", gateway)
+					}
+					continue
+				}
+				directive := "client_max_body_size " + tc.limit + ";"
+				if err != nil || !strings.Contains(controller, directive) || strings.Count(controller, "client_max_body_size ") != 1 {
+					t.Fatalf("gateway=%t: expected all controller locations to inherit %q, got %s (%v)", gateway, directive, controller, err)
+				}
+			}
+		})
 	}
 }
 

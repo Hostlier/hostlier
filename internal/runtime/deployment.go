@@ -106,7 +106,11 @@ func (d *dockerDeployment) rollback() {
 	if !d.rollbackCandidate(cleanup) {
 		return
 	}
-	d.restoreOldWriter(cleanup)
+	// A source process that has only started cannot establish successful rollback readiness.
+	if err := d.restoreOldWriter(cleanup); err != nil {
+		d.event("rollback-readiness", "The previous workload is not ready; retaining recovery state")
+		return
+	}
 	// Repair edge state only when the attempt changed routing or stopped the old workload.
 	if d.activated || d.oldStopped {
 		// Restore the recorded application or remove the newly introduced record.
@@ -457,26 +461,30 @@ func (d *dockerDeployment) rollbackGroup(ctx context.Context) {
 }
 
 // restoreOldWriter restores all members before republishing a retained volume owner.
-func (d *dockerDeployment) restoreOldWriter(ctx context.Context) {
+func (d *dockerDeployment) restoreOldWriter(ctx context.Context) error {
 	// Rollback must not start a previously stopped application.
 	if !d.oldStopped {
-		return
+		return nil
 	}
 	r := d.runtime
-	_ = r.groupContainerAction(ctx, d.old.Name, d.old.RuntimeID, "start", 20)
-	_ = r.memberAction(ctx, d.old, "start")
-	id := d.old.RuntimeID
-	// Group host bindings belong to the stable namespace holder.
-	if d.old.Anchor != "" {
-		id = d.old.Anchor
+	// Restore the previous group's dependencies and readiness through the normal start path.
+	if d.old.Spec.Version == 2 {
+		restored, err := r.startGroup(ctx, d.old)
+		d.old = restored
+		return err
 	}
-	// Private groups have no host publication to refresh.
-	if !model.Public(d.old.Spec) {
-		return
+	// Wait for the old writer to listen before returning the failed update to the caller.
+	if err := r.groupContainerAction(ctx, d.old.Name, d.old.RuntimeID, "start", 20); err != nil {
+		return err
 	}
-	port, err := r.backendPort(ctx, id, d.old.Spec.Port)
-	// Preserve the retained upstream when Docker cannot establish a new one.
-	if err == nil {
-		d.old.Upstream = net.JoinHostPort(r.options.UpstreamHost, port)
+	port, err := r.backendPort(ctx, d.old.RuntimeID, d.old.Spec.Port)
+	// Never treat an unresolved or unready loopback endpoint as a restored route.
+	if err != nil {
+		return err
 	}
+	if err = r.healthy(ctx, d.old.RuntimeID, port, healthPath(d.old.Spec), r.options.HealthTimeout); err != nil {
+		return err
+	}
+	d.old.Upstream = net.JoinHostPort(r.options.UpstreamHost, port)
+	return nil
 }

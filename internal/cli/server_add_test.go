@@ -32,7 +32,7 @@ set -eu
 echo ssh >> "$BOX/connections"
 for arg do remote=$arg; done
 # Redirect privileged paths to the fixture and exercise the production bootstrap script.
-printf '%s' "$remote" | sed "s|/run/hostlier-server-add.lock|$BOX/lock|g; s|/run/hostlier/controller.sock|$BOX/socket|g" > "$BOX/command"
+printf '%s' "$remote" | sed "s|/run/hostlier-server-add.lock|$BOX/lock|g; s|/run/hostlier/controller.sock|$BOX/socket|g; s|/var/lib/hostlier/installation.json|$BOX/installation.json|g" > "$BOX/command"
 exec sh "$BOX/command"
 `)
 	write("id", "#!/bin/sh\necho 1001\n")
@@ -68,7 +68,7 @@ exec sh "$BOX/command"
 	f := &fakeClient{reply: func(c call) (any, error) {
 		switch c.path {
 		case "/v1/hosts/identity":
-			return map[string]string{"fingerprint": master}, nil
+			return map[string]string{"fingerprint": master, "url": "https://prod.example.com:7464"}, nil
 		case "/v1/hosts":
 			if c.method == "GET" {
 				return map[string]any{"hosts": hosts}, nil
@@ -107,8 +107,19 @@ exec sh "$BOX/command"
 		t.Fatalf("connections: %q", connections)
 	}
 	init, _ := os.ReadFile(filepath.Join(dir, "init-args"))
-	if string(init) != "init\n--yes\n--domain\nbox.example.com\n--controller-hostname\nbox.example.com\n--master-fingerprint\n"+master+"\n" {
+	expected := "init\n--yes\n--domain\nbox.example.com\n--controller-hostname\nbox.example.com\n--master-fingerprint\n" + master + "\n--master-url\nhttps://prod.example.com:7464\n"
+	if string(init) != expected+"--runtime\nk3s\n" {
 		t.Fatalf("init args: %q", init)
+	}
+	// A recorded installation with a stopped controller must retain its runtime.
+	clear(hosts)
+	write("installation.json", `{"runtime":"docker"}`)
+	if _, err := invoke(args, "", Options{Client: f}); err != nil {
+		t.Fatal(err)
+	}
+	init, _ = os.ReadFile(filepath.Join(dir, "init-args"))
+	if string(init) != expected {
+		t.Fatalf("existing installation init args: %q", init)
 	}
 	// A corrupt release must never reach init or request enrollment.
 	clear(hosts)

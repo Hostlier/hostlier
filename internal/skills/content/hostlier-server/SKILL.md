@@ -7,9 +7,9 @@ description: Add a fleet controller, select server profiles, or open an SSH shel
 
 Use `hostlier server list` to inspect saved profiles and the selected box. Use `hostlier server list MASTER` to see a master’s enrolled boxes. `hostlier server use MASTER/BOX` selects the box for future workload commands. A box on the current master can be selected by name. `hostlier server use MASTER` selects the master itself.
 
-Use `hostlier connect https://CONTROLLER` to create a laptop profile and `hostlier connect admin@BOX` to add and select a box over one SSH connection. `hostlier server add admin@BOX` enrolls it while keeping the current selection. The master must reach the box on TCP 7464. A local release directory can be supplied with `--release-dir DIR`.
+Use `hostlier connect https://CONTROLLER` to create a laptop profile and `hostlier connect admin@BOX` to add and select a box over one SSH connection. `hostlier server add admin@BOX` enrolls it while keeping the current selection. The box connects outbound to the master on TCP 7464 using pinned mutual TLS and a persistent gRPC stream; only the master needs an inbound fleet firewall rule. A local release directory can be supplied with `--release-dir DIR`.
 
-From an installed box, run `sudo hostlier-controller connect MASTER_URL_OR_PROFILE` to join a master or switch to another one. The same workflow is available as `hostlier server join MASTER`. It uses the local administration socket, the master's enrollment review, and a mutually authenticated reachability check.
+From an installed member, run `sudo hostlier-controller connect https://MASTER --name NAME`. On the master, run `sudo hostlier-controller approve CODE` using the displayed code and confirm the identity in the terminal. Both commands select the local administration socket automatically; no browser, CLI profile or manual fingerprint copying is needed. `hostlier server join HTTPS_MASTER` shares the same flow.
 
 
 ## SSH shell and commands
@@ -38,3 +38,5 @@ hostlier server ssh configure --server default --ssh admin@server --ssh-config ~
 ```
 
 Omit `--ssh-config` to use standard OpenSSH configuration, keys and agent. Configuration does not install keys or grant privileges. Managed accounts do not receive administrator access: privileged Hostlier operations continue through separately approved controller maintenance commands.
+
+A signed-in laptop can approve the same code with `hostlier server approve CODE --server MASTER_PROFILE`. The login requires `servers.add` permission or all access. Terminal confirmation is required; no browser opens. Grant bounded actions with `hostlier access authorize --device ID --on local --scope actions --actions servers.add --for 2h --max-uses 5`. App actions use exact `--app` names and the target `--on` host; deploy, rollback, scale, stop, delete/purge and sidecar removal have separate permissions. See the controller-access guide for the complete catalog and limits.

@@ -6,8 +6,12 @@ test ! -e /var/lib/hostlier/installation.json
 cd /tmp
 export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=l
 apt-get -o Acquire::Retries=3 update -qq
-apt-get -o Acquire::Retries=3 install -y --no-install-recommends docker.io nginx certbot logrotate
-systemctl enable --now docker nginx
+apt-get -o Acquire::Retries=3 install -y --no-install-recommends nginx certbot logrotate
+systemctl enable --now nginx
+if [ "${2:-}" = "--with-image-builder" ]; then
+    apt-get -o Acquire::Retries=3 install -y --no-install-recommends docker.io
+    systemctl start docker
+fi
 install -m644 ca.crt /usr/local/share/ca-certificates/fleet-test.crt
 update-ca-certificates
 install -d -m700 /etc/fleet-test
@@ -19,10 +23,17 @@ printf '{"%s":{"certificate":"/etc/fleet-test/cert","key":"/etc/fleet-test/key"}
 # normal Hostlier-generated TLS virtual host and its verified DNS name.
 cat > /etc/nginx/conf.d/fleet-localhost.conf <<'NGINX'
 server {
-    listen 443 ssl default_server;
+    listen 443 ssl http2 default_server;
     server_name localhost;
     ssl_certificate /etc/fleet-test/cert;
     ssl_certificate_key /etc/fleet-test/key;
+    location ^~ /hostlier.control.v1.Controller/ {
+        client_max_body_size 3m;
+        grpc_pass grpc://127.0.0.1:7463;
+        grpc_set_header Host $host;
+        grpc_read_timeout 600s;
+        grpc_send_timeout 600s;
+    }
     location / { proxy_pass http://127.0.0.1:7463; }
 }
 NGINX

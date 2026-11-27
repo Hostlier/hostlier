@@ -301,7 +301,7 @@ def exercise():
         preview = json.loads(run('/tmp/hostlier', 'init', '--domain', DOMAIN, '--dry-run').stdout)
         (ROOT/'init-plan.json').write_text(json.dumps(preview, indent=2))
         assert preview['supported'], preview['errors']
-        assert (preview['runtime'], preview['proxy'], preview['dockerMode']) == ('docker', 'nginx-existing', 'existing')
+        assert (preview['runtime'], preview['proxy']) == ('k3s', 'nginx-existing')
         assert_preserved(baseline, 'after-preview')
         run('install', '-m755', '/tmp/hostlier', CLI)
         result = run('/tmp/hostlier', 'init', '--domain', DOMAIN, '--yes', timeout=420)
@@ -318,8 +318,10 @@ def exercise():
         assert_preserved(baseline, 'after-restart')
         approved_cli('conflict', 'deploy', '--file', str(ROOT/'conflict.hostlier'), expect_success=False)
         assert_preserved(baseline, 'after-conflict')
-        assert not run('docker', 'ps', '-aq', '--filter', 'label=io.hostlier.app=coexist-conflict').stdout.strip()
-        phases.append('conflicting legacy hostname rejected without a candidate container')
+        workloads = json.loads(run('k3s', 'kubectl', 'get', 'deployments', '-A', '-o', 'json').stdout)
+        assert all(item['metadata'].get('labels', {}).get('io.hostlier.app') != 'coexist-conflict'
+                   for item in workloads['items'])
+        phases.append('conflicting legacy hostname rejected without a candidate deployment')
         run(CLI, 'init', '--domain', DOMAIN, '--yes', timeout=420)
         assert 'Welcome to nginx!' in probe(NEW)['body']
         assert_preserved(baseline, 'after-reinit')

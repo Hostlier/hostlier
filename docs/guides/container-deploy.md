@@ -21,9 +21,11 @@ health:
 ```
 
 The context must contain a `Dockerfile`, or select a recipe inside that context with `source.container.dockerfile` (for example `.hostlier-build/web.Dockerfile`). This supports a shared monorepo context with a separate recipe for each app. Absolute paths, traversal outside the context, and escaping recipe symlinks are rejected. `plan`, `deploy`, and `update` explicitly
-run that Dockerfile locally through Docker Buildx, for the receiving controller's
-Linux CPU architecture. Docker must be running. The Docker build cache avoids unchanged
-build steps; credentials follow ordinary local Docker registry authentication.
+run that Dockerfile locally for the receiving controller's Linux CPU architecture.
+The default builder is Docker Buildx. On a machine with standalone BuildKit and
+`buildctl`, set `HOSTLIER_CONTAINER_BUILDER=buildkit` to build without Docker Engine.
+Use `BUILDKIT_HOST` to select your BuildKit endpoint. Both builders pass their
+image archive through the same Hostlier verification and upload flow.
 Use `.dockerignore` to keep secrets and unrelated files out of the build context.
 Runtime secrets belong in Hostlier's `secrets` references, not the Docker build.
 

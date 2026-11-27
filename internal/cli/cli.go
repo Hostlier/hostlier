@@ -109,7 +109,7 @@ func (s *session) dispatch() error {
 	if s.command == "approval" {
 		return s.approval()
 	}
-	handlers := map[string]func() error{"memory": s.memoryCommand, "tunnel": s.tunnelCommand, "fused": s.fused, "backup": s.backup, "ui": s.ui, "operation": s.operation, "scale": s.scale, "sidecar": s.sidecar, "product": s.product, "workflow": s.workflow, "usage": s.usage, "resource": s.resource, "plan": s.deploy, "deploy": s.deploy, "update": s.deploy, "rollback": s.deploy, "list": s.list, "doctor": s.doctor, "status": s.status, "start": s.lifecycle, "stop": s.lifecycle, "restart": s.lifecycle, "delete": s.lifecycle, "logs": s.logs, "controller": s.controllerCommand, "pairing": s.pairing, "clients": s.clients, "secret": s.secret, "domains": s.domains}
+	handlers := map[string]func() error{"swarm": s.swarmCommand, "memory": s.memoryCommand, "tunnel": s.tunnelCommand, "fused": s.fused, "backup": s.backup, "ui": s.ui, "operation": s.operation, "scale": s.scale, "sidecar": s.sidecar, "product": s.product, "workflow": s.workflow, "usage": s.usage, "resource": s.resource, "plan": s.deploy, "deploy": s.deploy, "update": s.deploy, "rollback": s.deploy, "list": s.list, "doctor": s.doctor, "status": s.status, "start": s.lifecycle, "stop": s.lifecycle, "restart": s.lifecycle, "delete": s.lifecycle, "logs": s.logs, "controller": s.controllerCommand, "pairing": s.pairing, "clients": s.clients, "secret": s.secret, "domains": s.domains}
 	// Dispatch only recognized authenticated commands.
 	if handler := handlers[s.command]; handler != nil {
 		return handler()
@@ -154,6 +154,9 @@ func parseInvocation(args []string) (arguments, error) {
 	parsed, err = routeArguments(parsed)
 	// Validate the normalized command so grouped app deploy and deploy accept the same flags.
 	if err != nil {
+		return parsed, err
+	}
+	if err := validateSwarmSelectionFlags(parsed); err != nil {
 		return parsed, err
 	}
 	if parsed.flags["all"] != "" && (len(parsed.args) == 0 || parsed.args[0] != "list") {

@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -31,35 +30,19 @@ func enrolledHostFixture(t *testing.T, f *humanFixture, name string) (*Controlle
 	host := newTestController(t, t.TempDir(), &recordingRuntime{}, time.Now)
 	// Keep this callback bounded to the current request and its captured state.
 	t.Cleanup(func() { closeController(t, host) })
-	pin, err := f.c.FleetFingerprint()
-	// Stop when fixture setup or the exercised operation fails.
-	if err != nil {
-		t.Fatal(err)
-	}
-	options := ListenOptions{ControllerFingerprint: pin}
-	host.mu.Lock()
-	err = host.prepareAgentListener(&options)
-	host.mu.Unlock()
-	// Stop when fixture setup or the exercised operation fails.
-	if err != nil {
-		t.Fatal(err)
-	}
-	server := httptest.NewUnstartedServer(host.remoteListenerHandler(options))
-	server.EnableHTTP2 = true
-	server.TLS = options.TLSConfig
-	server.StartTLS()
-	t.Cleanup(server.Close)
+	server := fleetMasterFixture(t, f.c)
 	hostPin, err := host.FleetFingerprint()
 	// Stop when fixture setup or the exercised operation fails.
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := f.propose(t, "POST", "/v1/hosts", map[string]string{"name": name, "url": server.URL, "fingerprint": hostPin})
+	a := f.propose(t, "POST", "/v1/hosts", map[string]string{"name": name, "url": "https://unreachable.invalid:7464", "fingerprint": hostPin})
 	status, result := approveFixtureRequest(t, f, a)
 	// Stop when fixture setup or the exercised operation fails.
 	if status != 200 {
 		t.Fatal(status, result)
 	}
+	connectFleetFixture(t, host, f.c, server.URL)
 	return host, server
 }
 
@@ -146,34 +129,27 @@ func TestFleetHidesAnotherActorsPlans(t *testing.T) {
 	}
 }
 
-// The normal loopback and pinned fleet listeners operate on the same per-box controller.
+// The member exposes no inbound fleet listener, while local management still works.
 func TestInstalledFleetListener(t *testing.T) {
 	f := newHumanFixture(t)
 	host := newTestController(t, t.TempDir(), &recordingRuntime{}, time.Now)
 	t.Cleanup(func() { closeController(t, host) })
-	masterPin, err := f.c.FleetFingerprint()
-	if err != nil {
+	if err := host.Listen(ListenOptions{TCP: true}); err != nil {
 		t.Fatal(err)
 	}
-	if err = host.Listen(ListenOptions{TCP: true, MasterFingerprint: masterPin}); err != nil {
-		t.Fatal(err)
+	server := fleetMasterFixture(t, f.c)
+	pin, _ := host.FleetFingerprint()
+	if code, res := approveFixtureRequest(t, f, f.propose(t, "POST", "/v1/hosts", map[string]string{"name": "box", "url": "https://unreachable.invalid:7464", "fingerprint": pin})); code != 200 {
+		t.Fatal(code, res)
 	}
+	connectFleetFixture(t, host, f.c, server.URL)
 	response, err := http.Get("http://" + host.Address() + "/health")
 	if err != nil {
 		t.Fatal(err)
 	}
 	response.Body.Close()
 	if response.StatusCode != 200 {
-		t.Fatalf("local edge status %d", response.StatusCode)
-	}
-	pin, err := host.FleetFingerprint()
-	if err != nil {
-		t.Fatal(err)
-	}
-	record := map[string]string{"name": "box", "url": "https://127.0.0.1:" + fleet.Port, "fingerprint": pin}
-	a := f.propose(t, "POST", "/v1/hosts", record)
-	if code, res := approveFixtureRequest(t, f, a); code != 200 {
-		t.Fatal(code, res)
+		t.Fatal(response.StatusCode)
 	}
 	status, res := humanHTTP(t, f.c, false, "GET", "/v1/hosts/box/proxy/host-state", nil, f.token, "")
 	if status != 200 || res["generation"] == nil {
@@ -181,96 +157,161 @@ func TestInstalledFleetListener(t *testing.T) {
 	}
 }
 
-// Switch via the protected local interface and restart with the original installer flag.
+func fleetMasterFixture(t *testing.T, master *Controller) *httptest.Server {
+	t.Helper()
+	master.mu.Lock()
+	cfg, err := master.fleetServerTLS()
+	master.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewUnstartedServer(master.fleetStreamHandler())
+	server.EnableHTTP2 = true
+	server.TLS = cfg
+	server.StartTLS()
+	t.Cleanup(func() { server.CloseClientConnections(); server.Close() })
+	return server
+}
+
+func connectFleetFixture(t *testing.T, host, master *Controller, endpoint string) {
+	t.Helper()
+	pin, err := master.FleetFingerprint()
+	if err != nil {
+		t.Fatal(err)
+	}
+	host.mu.Lock()
+	err = host.switchMaster(pin, endpoint)
+	host.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitFleetFixture(t, host, master)
+}
+
+func waitFleetFixture(t *testing.T, host, master *Controller) {
+	t.Helper()
+	pin, _ := host.FleetFingerprint()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		master.mu.Lock()
+		session := master.fleetSessions[pin]
+		ready := session != nil && session.conn.CanTakeNewRequest()
+		master.mu.Unlock()
+		if ready {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("controller did not connect outbound to master")
+}
+
+// Switch over the local socket, revoke an already open session, and restart.
 func TestFleetSwitchMasters(t *testing.T) {
 	a, b := newHumanFixture(t), newHumanFixture(t)
-	apin, err := a.c.FleetFingerprint()
-	if err != nil {
-		t.Fatal(err)
-	}
-	bpin, err := b.c.FleetFingerprint()
-	if err != nil {
-		t.Fatal(err)
-	}
+	as, bs := fleetMasterFixture(t, a.c), fleetMasterFixture(t, b.c)
+	apin, _ := a.c.FleetFingerprint()
+	bpin, _ := b.c.FleetFingerprint()
 	dir := t.TempDir()
-	start := func(bootstrap string) *Controller {
-		box := newTestController(t, dir, &recordingRuntime{}, time.Now)
-		if err := box.Listen(ListenOptions{TCP: true, MasterFingerprint: bootstrap}); err != nil {
-			t.Fatal(err)
-		}
-		return box
-	}
-	box := start("")
+	box := newTestController(t, dir, &recordingRuntime{}, time.Now)
 	defer func() { closeController(t, box) }()
-	if code, res := humanHTTP(t, box, true, "PUT", "/v1/fleet/master", fleet.MasterChange{Fingerprint: apin}, "", ""); code != 200 {
-		t.Fatal(code, res)
-	}
-	bp, err := box.FleetFingerprint()
-	if err != nil {
-		t.Fatal(err)
-	}
-	record := map[string]string{"name": "box", "url": "https://127.0.0.1:" + fleet.Port, "fingerprint": bp}
-	for _, master := range []*humanFixture{a, b} {
-		if code, res := approveFixtureRequest(t, master, master.propose(t, "POST", "/v1/hosts", record)); code != 200 {
+	bp, _ := box.FleetFingerprint()
+	record := map[string]string{"name": "box", "url": "https://unreachable.invalid:7464", "fingerprint": bp}
+	for _, f := range []*humanFixture{a, b} {
+		if code, res := approveFixtureRequest(t, f, f.propose(t, "POST", "/v1/hosts", record)); code != 200 {
 			t.Fatal(code, res)
 		}
 	}
+	connectFleetFixture(t, box, a.c, as.URL)
 	probe := func(f *humanFixture, want bool) {
 		t.Helper()
-		code, _ := humanHTTP(t, f.c, false, "GET", "/v1/hosts/box/proxy/host-state", nil, f.token, "")
+		code, res := humanHTTP(t, f.c, false, "GET", "/v1/hosts/box/proxy/host-state", nil, f.token, "")
 		if (code == 200) != want {
-			t.Fatalf("probe status %d, expected success=%v", code, want)
+			t.Fatal(code, res, want)
 		}
-	}
-	a.c.mu.Lock()
-	identity, err := a.c.fleetIdentity()
-	a.c.mu.Unlock()
-	if err != nil {
-		t.Fatal(err)
-	}
-	tlsConfig, err := fleet.TLS(identity, bp, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	transport := &http.Transport{TLSClientConfig: tlsConfig}
-	defer transport.CloseIdleConnections()
-	oldClient := http.Client{Transport: transport}
-	oldRequest := func() (int, error) {
-		req, err := http.NewRequest("GET", record["url"]+"/v1/host-state", nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		req.Header.Set("X-Hostlier-Actor", strings.Repeat("a", 64))
-		resp, err := oldClient.Do(req)
-		if err != nil {
-			return 0, err
-		}
-		io.Copy(io.Discard, resp.Body)
-		resp.Body.Close()
-		return resp.StatusCode, nil
-	}
-	if got, err := oldRequest(); err != nil || got != http.StatusOK {
-		t.Fatal(got, err)
 	}
 	probe(a, true)
 	probe(b, false)
-	change := fleet.MasterChange{Previous: apin, Fingerprint: bpin}
+	change := fleet.MasterChange{Previous: apin, Fingerprint: bpin, URL: bs.URL}
 	if code, _ := humanHTTP(t, box, false, "PUT", "/v1/fleet/master", change, "", ""); code == 200 {
 		t.Fatal("remote switch accepted")
 	}
 	if code, res := humanHTTP(t, box, true, "PUT", "/v1/fleet/master", change, "", ""); code != 200 {
 		t.Fatal(code, res)
 	}
-	if got, err := oldRequest(); got != http.StatusForbidden && (err == nil || !strings.Contains(err.Error(), "fleet peer identity mismatch") && !strings.Contains(err.Error(), "tls: bad certificate")) {
-		t.Fatal("old TLS connection retained access", got, err)
-	}
+	waitFleetFixture(t, box, b.c)
 	probe(a, false)
 	probe(b, true)
 	if code, _ := humanHTTP(t, box, true, "PUT", "/v1/fleet/master", change, "", ""); code == 200 {
 		t.Fatal("stale switch accepted")
 	}
 	closeController(t, box)
-	box = start(apin)
+	box = newTestController(t, dir, &recordingRuntime{}, time.Now)
+	if err := box.Listen(ListenOptions{TCP: true, MasterFingerprint: apin, MasterURL: as.URL}); err != nil {
+		t.Fatal(err)
+	}
+	waitFleetFixture(t, box, b.c)
 	probe(a, false)
 	probe(b, true)
+}
+
+func TestFleetReconnectAndRevoke(t *testing.T) {
+	f := newHumanFixture(t)
+	host, server := enrolledHostFixture(t, f, "box")
+	server.CloseClientConnections()
+	// Wait for the old reverse session to stop before waiting for its replacement.
+	pin, _ := host.FleetFingerprint()
+	f.c.mu.Lock()
+	previous := f.c.fleetSessions[pin]
+	f.c.mu.Unlock()
+	deadline := time.Now().Add(8 * time.Second)
+	for {
+		f.c.mu.Lock()
+		current := f.c.fleetSessions[pin]
+		f.c.mu.Unlock()
+		if current != nil && current != previous {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("session did not reconnect")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if code, res := humanHTTP(t, f.c, false, "GET", "/v1/hosts/box/proxy/host-state", nil, f.token, ""); code != 200 {
+		t.Fatal(code, res)
+	}
+	if code, res := approveFixtureRequest(t, f, f.propose(t, "DELETE", "/v1/hosts/box", map[string]any{})); code != 200 {
+		t.Fatal(code, res)
+	}
+	f.c.mu.Lock()
+	session := f.c.fleetSessions[pin]
+	f.c.mu.Unlock()
+	if session != nil {
+		t.Fatal("revoked session retained")
+	}
+	if code, _ := humanHTTP(t, f.c, false, "GET", "/v1/hosts/box/proxy/host-state", nil, f.token, ""); code == 200 {
+		t.Fatal("revoked host accessible")
+	}
+}
+
+// Legacy pin-only state can adopt an endpoint without changing its trusted master.
+func TestFleetLegacyPinAdoptsMasterURL(t *testing.T) {
+	f := newHumanFixture(t)
+	host := newTestController(t, t.TempDir(), &recordingRuntime{}, time.Now)
+	t.Cleanup(func() { closeController(t, host) })
+	server := fleetMasterFixture(t, f.c)
+	masterPin, _ := f.c.FleetFingerprint()
+	hostPin, _ := host.FleetFingerprint()
+	host.mu.Lock()
+	host.state.MasterFingerprint = &masterPin
+	host.mu.Unlock()
+	if code, res := approveFixtureRequest(t, f, f.propose(t, "POST", "/v1/hosts", map[string]string{"name": "box", "fingerprint": hostPin})); code != 200 {
+		t.Fatal(code, res)
+	}
+	if err := host.Listen(ListenOptions{TCP: true, MasterFingerprint: masterPin, MasterURL: server.URL}); err != nil {
+		t.Fatal(err)
+	}
+	waitFleetFixture(t, host, f.c)
+	if code, res := humanHTTP(t, f.c, false, "GET", "/v1/hosts/box/proxy/host-state", nil, f.token, ""); code != 200 {
+		t.Fatal(code, res)
+	}
 }

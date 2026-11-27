@@ -81,7 +81,7 @@ Download these artifacts from the completed workflow run:
 | --- | --- |
 | `hostlier-controller-linux-amd64` | Linux AMD64 installation archive, including `collector-image/`, and SHA-256 checksum |
 | `hostlier-controller-linux-arm64` | Linux ARM64 installation archive, including `collector-image/`, and SHA-256 checksum |
-| `hostlier-controller-darwin-amd64` / `hostlier-controller-darwin-arm64` | Native macOS controller binary and checksum for memory mode |
+| `hostlier-controller-darwin-amd64` / `hostlier-controller-darwin-arm64` | Native macOS controller binary and checksum for control-plane and memory modes |
 | `hostlier-cli-linux-amd64` / `hostlier-cli-linux-arm64` | Standalone Linux CLI archive and checksum |
 | `hostlier-cli-darwin-amd64` / `hostlier-cli-darwin-arm64` | Standalone macOS CLI archive and checksum |
 

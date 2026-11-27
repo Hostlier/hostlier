@@ -17,14 +17,13 @@ func TestAutomaticInstallationChoices(t *testing.T) {
 		docker, nginx                      bool
 		wantRuntime, wantProxy, wantDocker string
 	}{
-		{"empty", "", "", false, false, "docker", "caddy", "managed"},
-		{"docker only", "", "", true, false, "docker", "caddy", "existing"},
-		{"nginx only", "", "", false, true, "docker", "nginx-existing", "managed"},
-		{"both", "", "", true, true, "docker", "nginx-existing", "existing"},
-		{"explicit auto", "auto", "auto", true, true, "docker", "nginx-existing", "existing"},
-		{"explicit docker", "docker", "", true, true, "docker", "nginx-existing", "existing"},
-		{"explicit standalone nginx", "docker", "nginx", true, false, "docker", "nginx", "existing"},
-		{"explicit caddy", "", "caddy", true, true, "docker", "caddy", "existing"},
+		{"empty", "", "", false, false, "k3s", "caddy", ""},
+		{"docker only", "", "", true, false, "k3s", "caddy", ""},
+		{"nginx only", "", "", false, true, "k3s", "nginx-existing", ""},
+		{"both", "", "", true, true, "k3s", "nginx-existing", ""},
+		{"explicit auto", "auto", "auto", true, true, "k3s", "nginx-existing", ""},
+		{"explicit standalone nginx", "", "nginx", true, false, "k3s", "nginx", ""},
+		{"explicit caddy", "", "caddy", true, true, "k3s", "caddy", ""},
 		{"k3s empty", "k3s", "", false, false, "k3s", "caddy", ""},
 		{"k3s docker", "k3s", "", true, false, "k3s", "caddy", ""},
 		{"k3s nginx", "k3s", "", false, true, "k3s", "nginx-existing", ""},
@@ -40,6 +39,59 @@ func TestAutomaticInstallationChoices(t *testing.T) {
 				t.Fatalf("got runtime=%s proxy=%s docker=%s", o.Runtime, o.Proxy, o.DockerMode)
 			}
 		})
+	}
+}
+
+// TestInstallationRuntimePolicy covers fresh admission and upgrades using recorded ownership.
+func TestInstallationRuntimePolicy(t *testing.T) {
+	for _, c := range []struct {
+		name, flag string
+		installed  *Installation
+		allowed    bool
+	}{
+		{"fresh omitted", "", nil, true},
+		{"fresh auto", "auto", nil, true},
+		{"fresh k3s", "k3s", nil, true},
+		{"fresh docker rejected", "docker", nil, false},
+		{"standalone containerd rejected", "containerd", nil, false},
+		{"docker omitted", "", &Installation{Runtime: "docker"}, true},
+		{"docker auto", "auto", &Installation{Runtime: "docker"}, true},
+		{"docker verified update", "docker", &Installation{Runtime: "docker"}, true},
+		{"docker to k3s requires migration", "k3s", &Installation{Runtime: "docker"}, false},
+		{"k3s to docker rejected", "docker", &Installation{Runtime: "k3s"}, false},
+		{"incomplete record rejected", "", &Installation{}, false},
+	} {
+		// Exercise the same resolver followed by the same admission policy as Inspect.
+		t.Run(c.name, func(t *testing.T) {
+			o := resolveDetectedOptions(Options{Runtime: c.flag}, c.installed, hostDetection{Docker: true})
+			if err := validateInstallationRuntime(o, c.installed); (err == nil) != c.allowed {
+				t.Fatalf("runtime %q: %v; admission wanted=%v", o.Runtime, err, c.allowed)
+			}
+		})
+	}
+}
+
+// TestFreshInstallationRejectsUnrecordedState protects workload ledgers and existing controller units.
+func TestFreshInstallationRejectsUnrecordedState(t *testing.T) {
+	root := t.TempDir()
+	for _, name := range []string{"state.db", "state.json", "runtime-docker.json", "resources-k3s.json", "hostlier.service"} {
+		// Use isolated paths for each existing ownership signal.
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(dir, name), nil, 0600); err != nil {
+				t.Fatal(err)
+			}
+			if err := checkFreshInstallationState(dir, filepath.Join(dir, "hostlier.service")); err == nil {
+				t.Fatal("unrecorded installation accepted")
+			}
+		})
+	}
+	// A pre-provisioned node security policy is a legitimate fresh configuration.
+	if err := os.WriteFile(filepath.Join(root, "k3s-security.json"), nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkFreshInstallationState(root, filepath.Join(root, "hostlier.service")); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -171,9 +223,9 @@ func recordedInstallationCommands(t *testing.T, o Options) []string {
 	return calls
 }
 
-// TestDockerOnlyReuseLeavesDaemonAlone verifies a new Caddy installation does not take over existing Docker.
+// TestDockerOnlyReuseLeavesDaemonAlone keeps a legacy external Docker service operator-managed.
 func TestDockerOnlyReuseLeavesDaemonAlone(t *testing.T) {
-	o := resolveDetectedOptions(Options{Domain: "example.com"}, nil, hostDetection{Docker: true})
+	o := resolveDetectedOptions(Options{Domain: "example.com"}, &Installation{Runtime: "docker", Proxy: "caddy", DockerMode: "existing"}, hostDetection{Docker: true})
 	calls := recordedInstallationCommands(t, o)
 	// Existing Docker may be inspected but never enabled, restarted, installed or reconfigured.
 	for _, call := range calls {
@@ -193,12 +245,12 @@ func TestDockerOnlyReuseLeavesDaemonAlone(t *testing.T) {
 	}
 }
 
-// TestNginxOnlyInstallsMissingDocker verifies coexistence no longer suppresses an independently needed runtime.
-func TestNginxOnlyInstallsMissingDocker(t *testing.T) {
+// TestNginxOnlyInstallsK3s verifies fresh coexistence with the operator's Nginx.
+func TestNginxOnlyInstallsK3s(t *testing.T) {
 	o := resolveDetectedOptions(Options{Domain: "example.com"}, nil, hostDetection{Nginx: true})
 	calls := strings.Join(recordedInstallationCommands(t, o), "\n")
-	// Both the absent runtime package and its service must be installed through the approved plan.
-	if !strings.Contains(calls, "docker.io="+DockerVersion) || !strings.Contains(calls, "systemctl enable --now docker.service") {
+	// K3s supplies the runtime even when Docker is absent.
+	if strings.Contains(calls, "docker") || !strings.Contains(calls, "systemctl enable --now k3s.service") {
 		t.Fatal(calls)
 	}
 	// Existing Nginx receives only read-only readiness checks at installation service stages.

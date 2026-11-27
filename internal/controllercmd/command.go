@@ -7,7 +7,9 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"hostlier/internal/fleetjoin"
 	"io"
+	"runtime"
 	"strings"
 )
 
@@ -25,9 +27,12 @@ type session struct {
 
 const helpText = `Hostlier controller
 Usage: hostlier-controller run [options]
+       hostlier-controller run --mode control-plane [--config FILE] [--tls-cert FILE --tls-key FILE]
        hostlier-controller run --mode memory --memory-root EXISTING_DIRECTORY [--config FILE] (macOS or Linux)
-       hostlier-controller connect MASTER_URL_OR_PROFILE
-       hostlier-controller init --domain DOMAIN [--master-fingerprint SHA256] [--dry-run] [--yes] [--runtime auto|docker|k3s] [--proxy MODE]
+       hostlier-controller connect HTTPS_MASTER [--name NAME] [--socket PATH]
+       hostlier-controller approve CODE [--socket PATH]
+       hostlier-controller init --domain DOMAIN [--master-fingerprint SHA256 --master-url https://MASTER:7464] [--dry-run] [--yes] [--runtime auto|k3s|docker] [--proxy MODE] (docker for existing installations)
+       hostlier-controller init --domain DOMAIN [--dry-run] [--yes] [--tls-cert FILE --tls-key FILE] (macOS)
        hostlier-controller update [--dry-run] [--yes] [--state-dir DIR] [--config FILE]
        hostlier-controller migrate plan|apply --to k3s --backup-dir NEW_DIRECTORY [--yes]
        hostlier-controller migrate status|rollback [--state-dir DIR] [--yes]
@@ -83,10 +88,15 @@ func runLocalSetup(ctx context.Context, args []string, in io.Reader, out, errOut
 	// Select only representations explicitly supported by the migration contract.
 	switch args[0] {
 	// Keep this alternative within the validated operation or archive contract.
+	case "approve":
+		return true, fleetjoin.RunApprove(ctx, args[1:], in, out, errOut)
 	case "connect":
-		return true, connectMaster(ctx, args[1:], in, out, errOut)
+		return true, fleetjoin.RunConnect(ctx, args[1:], out, errOut)
 	// Keep this alternative within the validated operation or archive contract.
 	case "init":
+		if runtime.GOOS == "darwin" {
+			return true, runMacInit(ctx, args[1:], in, out, errOut, macInitSystem{})
+		}
 		return true, runInit(ctx, args[1:], in, out, errOut, initDependencies{})
 	// Keep this alternative within the validated operation or archive contract.
 	case "update":
@@ -128,7 +138,7 @@ func (s *session) parse(args []string, errOut io.Writer) error {
 	flags.SetOutput(errOut)
 	values := map[string]*string{}
 	// Each value is loaded into the daemon session after successful parsing.
-	for _, name := range strings.Fields("state-dir config runtime mode memory-root proxy hostname controller-hostname host port socket log-path auth-config data-config controller-fingerprint master-fingerprint output input tunnel-domain tunnel-url url request name") {
+	for _, name := range strings.Fields("state-dir config runtime mode memory-root proxy hostname controller-hostname host port socket log-path auth-config data-config controller-fingerprint master-fingerprint master-url output input tunnel-domain tunnel-url url request name tls-cert tls-key fleet-address") {
 		values[name] = flags.String(name, "", name)
 	}
 	flags.Bool("json", false, "emit JSON status (default)")

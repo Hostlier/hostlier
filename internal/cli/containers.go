@@ -177,20 +177,38 @@ func validateContainerRecipePath(a model.ContainerSource) error {
 	return nil
 }
 
-// buildContainer runs the explicitly selected local Dockerfile with a bounded platform and output path.
+// buildContainer builds the reviewed local recipe with the operator-selected builder.
 func (s *session) buildContainer(a model.ContainerSource) error {
+	program, args, err := containerBuildInvocation(os.Getenv("HOSTLIER_CONTAINER_BUILDER"), a)
+	// Unsupported choices never execute a different local builder.
+	if err != nil {
+		return err
+	}
 	fmt.Fprintf(s.errOut, "Building container locally for linux/%s\n", a.Architecture)
+	command := exec.CommandContext(s.ctx, program, args...)
+	command.Stdout, command.Stderr = s.errOut, s.errOut
+	// A failed build cannot upload an older or substituted image.
+	if err := command.Run(); err != nil {
+		return model.Err("CONTAINER_BUILD", "Local container build failed; verify the selected builder is running and inspect the build output")
+	}
+	return nil
+}
+
+// containerBuildInvocation preserves the verified archive pipeline across supported builders.
+func containerBuildInvocation(builder string, a model.ContainerSource) (string, []string, error) {
+	// Standalone BuildKit can run without a Docker daemon and honors its normal BUILDKIT_HOST setting.
+	if builder == "buildkit" {
+		args := []string{"build", "--frontend", "dockerfile.v0", "--local", "context=" + a.Context, "--local", "dockerfile=" + a.Context, "--opt", "filename=" + defaultValue(a.Dockerfile, "Dockerfile"), "--opt", "platform=linux/" + a.Architecture, "--output", "type=docker,name=hostlier-local:build,dest=" + a.Archive}
+		return "buildctl", args, nil
+	}
+	// Keep Docker Buildx as the default for existing CLI projects.
+	if builder != "" && builder != "docker" {
+		return "", nil, model.Err("CONTAINER_BUILD", "HOSTLIER_CONTAINER_BUILDER must be docker or buildkit")
+	}
 	args := []string{"buildx", "build", "--platform", "linux/" + a.Architecture, "--provenance=false", "--output", "type=docker,dest=" + a.Archive}
 	// Monorepo apps keep their full workspace context while selecting their own reviewed recipe.
 	if a.Dockerfile != "" {
 		args = append(args, "--file", filepath.Join(a.Context, a.Dockerfile))
 	}
-	args = append(args, a.Context)
-	command := exec.CommandContext(s.ctx, "docker", args...)
-	command.Stdout, command.Stderr = s.errOut, s.errOut
-	// Docker may be absent or a build may fail; neither permits a deployment with substituted content.
-	if err := command.Run(); err != nil {
-		return model.Err("CONTAINER_BUILD", "Local container build failed; verify Docker is running and inspect the build output")
-	}
-	return nil
+	return "docker", append(args, a.Context), nil
 }

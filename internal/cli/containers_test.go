@@ -12,9 +12,30 @@ import (
 	"hostlier/internal/model"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
+
+// TestContainerBuildInvocation selects standalone BuildKit without changing Docker defaults.
+func TestContainerBuildInvocation(t *testing.T) {
+	source := model.ContainerSource{Context: "/build context", Dockerfile: "service/Containerfile", Architecture: "arm64", Archive: "/build output/app.tar"}
+	program, args, err := containerBuildInvocation("buildkit", source)
+	want := []string{"build", "--frontend", "dockerfile.v0", "--local", "context=/build context", "--local", "dockerfile=/build context", "--opt", "filename=service/Containerfile", "--opt", "platform=linux/arm64", "--output", "type=docker,name=hostlier-local:build,dest=/build output/app.tar"}
+	// Spaces remain in individual argv values rather than being interpreted by a shell.
+	if err != nil || program != "buildctl" || !slices.Equal(args, want) {
+		t.Fatalf("BuildKit: %s %q %v", program, args, err)
+	}
+	program, args, err = containerBuildInvocation("", source)
+	// Omitted selection retains the current Buildx contract.
+	if err != nil || program != "docker" || !slices.Contains(args, "--provenance=false") {
+		t.Fatalf("Docker: %s %q %v", program, args, err)
+	}
+	// Unknown builder names cannot select arbitrary executables.
+	if _, _, err := containerBuildInvocation("custom", source); err == nil {
+		t.Fatal("unknown builder accepted")
+	}
+}
 
 // containerProject writes an explicit project-relative archive fixture for ordinary CLI invocation.
 func containerProject(t *testing.T) string {

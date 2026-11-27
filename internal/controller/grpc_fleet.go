@@ -2,10 +2,8 @@ package controller
 
 import (
 	"context"
-	"crypto/tls"
 	"net/http"
 	"strings"
-	"time"
 
 	"connectrpc.com/connect"
 	pb "hostlier/internal/controlrpc"
@@ -28,7 +26,7 @@ func (s controlService) forwardWatch(ctx context.Context, host, route string, op
 	if err != nil {
 		return watchRPCError(err)
 	}
-	peer, config, actor, err := s.watchPeer(r, host)
+	peer, transport, actor, err := s.watchPeer(r, host)
 	if err != nil {
 		return watchRPCError(err)
 	}
@@ -36,9 +34,7 @@ func (s controlService) forwardWatch(ctx context.Context, host, route string, op
 		return publicRPCError(model.Err("RATE_LIMITED", "Watch capacity exceeded"))
 	}
 	defer s.c.observations.releaseStatusStream()
-	transport := &http.Transport{TLSClientConfig: config, ForceAttemptHTTP2: true, TLSHandshakeTimeout: 10 * time.Second}
-	defer transport.CloseIdleConnections()
-	api := controlrpcconnect.NewControllerClient(&http.Client{Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, peer.URL, connect.WithGRPC(), connect.WithReadMaxBytes(4<<20+1024))
+	api := controlrpcconnect.NewControllerClient(&http.Client{Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, "https://fleet.invalid", connect.WithGRPC(), connect.WithReadMaxBytes(4<<20+1024))
 	var upstream *connect.ServerStreamForClient[pb.Event]
 	if op != nil {
 		call := connect.NewRequest(&pb.EventRequest{OperationId: op.OperationId, Cursor: op.Cursor})
@@ -50,7 +46,7 @@ func (s controlService) forwardWatch(ctx context.Context, host, route string, op
 		upstream, err = api.WatchJob(ctx, call)
 	}
 	if err != nil {
-		return err
+		return fleetWatchError(ctx, transport, err)
 	}
 	defer upstream.Close()
 	send := streamSender(ctx, out)
@@ -70,10 +66,10 @@ func (s controlService) forwardWatch(ctx context.Context, host, route string, op
 			return err
 		}
 	}
-	return upstream.Err()
+	return fleetWatchError(ctx, transport, upstream.Err())
 }
 
-func (s controlService) watchPeer(r *http.Request, name string) (HostRecord, *tls.Config, string, error) {
+func (s controlService) watchPeer(r *http.Request, name string) (HostRecord, http.RoundTripper, string, error) {
 	c := s.c
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -85,10 +81,19 @@ func (s controlService) watchPeer(r *http.Request, name string) (HostRecord, *tl
 	if !ok {
 		return HostRecord{}, nil, "", model.Err("NOT_FOUND", "Enrolled host not found")
 	}
-	identity, err := c.fleetIdentity()
-	if err != nil {
-		return host, nil, "", err
+	transport, err := c.fleetTransport(host)
+	return host, transport, strings.TrimPrefix(c.store.Authenticate("fleet-actor|"+actor), "hmac:"), err
+}
+
+// A lost upstream transport becomes an explicit retryable gRPC status at the
+// master boundary; forwarding its raw error would turn it into a wire failure.
+func fleetWatchError(ctx context.Context, transport http.RoundTripper, err error) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
 	}
-	config, err := fleet.TLS(identity, host.Fingerprint, false)
-	return host, config, strings.TrimPrefix(c.store.Authenticate("fleet-actor|"+actor), "hmac:"), err
+	connection, ok := transport.(interface{ CanTakeNewRequest() bool })
+	if err != nil && (pb.IsTransportInterruption(err) || ok && !connection.CanTakeNewRequest()) {
+		return connect.NewError(connect.CodeUnavailable, model.Err("HOST_UNAVAILABLE", "Member controller disconnected"))
+	}
+	return err
 }

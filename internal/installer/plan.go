@@ -10,6 +10,7 @@ import (
 
 // Options contains the target installation paths and selected runtime identity.
 type Options struct {
+	MasterURL          string              `json:"masterURL,omitempty"`
 	MasterFingerprint  string              `json:"masterFingerprint,omitempty"`
 	DockerLogin        *dockerlogin.Source `json:"dockerLogin,omitempty"`
 	DockerMode         string              `json:"dockerMode,omitempty"`
@@ -31,6 +32,7 @@ type Component struct {
 
 // Installation records approved ownership and completed stages for safe retries.
 type Installation struct {
+	MasterURL          string              `json:"masterURL,omitempty"`
 	MasterFingerprint  string              `json:"masterFingerprint,omitempty"`
 	DockerLogin        *dockerlogin.Source `json:"dockerLogin,omitempty"`
 	DockerMode         string              `json:"dockerMode,omitempty"`
@@ -88,9 +90,9 @@ func defaults(o Options) Options {
 	if o.Proxy == "" {
 		o.Proxy = "caddy"
 	}
-	// Select Docker when no runtime was explicitly requested.
+	// Render K3s assets by default for callers without a recorded runtime.
 	if o.Runtime == "" {
-		o.Runtime = "docker"
+		o.Runtime = "k3s"
 	}
 	// Derive the controller hostname from the declared supported domain.
 	if o.ControllerHostname == "" {

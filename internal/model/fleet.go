@@ -23,6 +23,6 @@ func FleetRoute(path string) bool {
 	if path == "/v1/telemetry/history" || path == "/v1/packages/platform" {
 		return true
 	}
-	allowed := map[string]bool{"backup-ticks": true, "recovery-review": true, "backup-destinations": true, "backup-policies": true, "recovery-jobs": true, "upgrades": true, "backup-imports": true, "host-state": true, "status": true, "doctor": true, "logs": true, "plans": true, "planning": true, "resource-plans": true, "resources": true, "backups": true, "secrets": true, "apps": true, "operations": true, "artifacts": true, "workflows": true, "domains": true}
+	allowed := map[string]bool{"swarms": true,"backup-ticks": true, "recovery-review": true, "backup-destinations": true, "backup-policies": true, "recovery-jobs": true, "upgrades": true, "backup-imports": true, "host-state": true, "status": true, "doctor": true, "logs": true, "plans": true, "planning": true, "resource-plans": true, "resources": true, "backups": true, "secrets": true, "apps": true, "operations": true, "artifacts": true, "workflows": true, "domains": true}
 	return allowed[p[1]]
 }

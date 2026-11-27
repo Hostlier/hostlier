@@ -1,6 +1,6 @@
 # Local integration tests
 
-For the installed Go binary on fresh Docker and k3s servers, including real CLI approval, local-CA HTTPS, resource bindings and reboot recovery, use [VM_TESTS.md](VM_TESTS.md). Recorded results and remaining gates are in [../../VALIDATION.md](../../VALIDATION.md).
+For fresh K3s installs and legacy Docker upgrades, including CLI approval, local-CA HTTPS and persistent data, use [VM_TESTS.md](VM_TESTS.md). Earlier results and remaining gates are in [../../VALIDATION.md](../../VALIDATION.md).
 
 ## Docker and Caddy
 

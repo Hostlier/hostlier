@@ -38,12 +38,15 @@ type Options struct {
 	Runtime                            model.Runtime
 	ResourceManager                    model.ResourceManager
 	Hostname, LogPath                  string
+	PublicOrigin                       string
 	Now                                func() time.Time
 	PairingTTL, PlanTTL                time.Duration
 }
 
 // ListenOptions selects protected local and TLS remote API listeners.
 type ListenOptions struct {
+	MasterURL             string
+	FleetAddress          string // Dedicated inbound gRPC endpoint; empty disables it.
 	MasterFingerprint     string
 	ControllerFingerprint string
 	SocketPath, Host      string
@@ -54,6 +57,8 @@ type ListenOptions struct {
 
 // Controller owns durable state, listener lifecycle and serialized background execution.
 type Controller struct {
+	fleetAddress           string
+	fleetSessions          map[string]*fleetSession
 	master                 masterListener
 	agentOnly              bool
 	tunnelBrokers          map[string]*tunnel.Broker

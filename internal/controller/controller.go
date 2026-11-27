@@ -62,12 +62,20 @@ func New(o Options) (*Controller, error) {
 		return nil, err
 	}
 	// Reject this path: State version or runtime incompatible.
-	if c.state.Version != 2 || c.state.Runtime != o.Runtime.Name() {
+	if (c.state.Version != 2 && c.state.Version != 3) || c.state.Runtime != o.Runtime.Name() {
 		c.store.Close()
 		return nil, model.Err("INCOMPATIBLE_STATE", "State version or runtime incompatible")
 	}
+	if c.controlPlaneOnly() && c.state.Hostname != o.Hostname {
+		c.store.Close()
+		return nil, model.Err("INCOMPATIBLE_STATE", "Use the hostname recorded for this control plane")
+	}
 	// Reject incompatible persisted state or unauthorized configured routes before serving.
 	if err = c.reconcileState(conf); err != nil {
+		c.store.Close()
+		return nil, err
+	}
+	if err = c.initializeSwarms(); err != nil {
 		c.store.Close()
 		return nil, err
 	}
@@ -138,7 +146,11 @@ func (c *Controller) Address() string { c.mu.Lock(); defer c.mu.Unlock(); return
 func (c *Controller) Listen(o ListenOptions) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.opts.Runtime.Name() == "memory" && (o.MasterFingerprint != "" || o.ControllerFingerprint != "") {
+	if c.controlPlaneOnly() && (o.MasterURL != "" || o.MasterFingerprint != "" || o.ControllerFingerprint != "" ||
+		c.state.MasterURL != "" || c.state.MasterFingerprint != nil && *c.state.MasterFingerprint != "") {
+		return model.Err("CONTROLLER_MODE", "A control-plane controller cannot join as a workload worker")
+	}
+	if c.opts.Runtime.Name() == "memory" && (o.FleetAddress != "" || o.MasterURL != "" || o.MasterFingerprint != "" || o.ControllerFingerprint != "") {
 		return model.Err("CONTROLLER_MODE", "Memory controllers cannot expose or join a fleet listener")
 	}
 	// Reject a second listener setup on the same controller.
@@ -194,21 +206,44 @@ func (c *Controller) Listen(o ListenOptions) error {
 	if c.state.MasterFingerprint != nil {
 		pin = *c.state.MasterFingerprint
 	}
+	endpoint := o.MasterURL
+	if c.state.MasterFingerprint != nil {
+		endpoint = c.state.MasterURL
+		// A matching bootstrap pin may fill the missing endpoint on legacy state.
+		if endpoint == "" && pin == o.MasterFingerprint {
+			endpoint = o.MasterURL
+		}
+	}
 	if pin != "" && !c.agentOnly {
+		if endpoint != "" && !validHostURL(endpoint) {
+			cleanup()
+			return model.Err("INVALID_HOST", "Configure --master-url or rejoin the master to enable outbound fleet connections")
+		}
 		peer, err := c.newMasterPeer(pin)
 		if err != nil {
 			cleanup()
 			return err
 		}
-		l, handler, err := c.openMasterListener()
+		if c.master.peer != nil {
+			c.master.peer.cancel()
+		}
+		c.master = masterListener{peer: peer}
+		c.state.MasterURL = endpoint
+	}
+	if o.FleetAddress != "" && !c.agentOnly {
+		cfg, err := c.fleetServerTLS()
 		if err != nil {
-			peer.cancel()
 			cleanup()
 			return err
 		}
-		c.master = masterListener{peer: peer, open: true}
-		listeners = append(listeners, l)
-		handlers = append(handlers, handler)
+		l, err := net.Listen("tcp", o.FleetAddress)
+		if err != nil {
+			cleanup()
+			return err
+		}
+		c.fleetAddress = l.Addr().String()
+		listeners = append(listeners, tls.NewListener(l, cfg))
+		handlers = append(handlers, c.fleetStreamHandler())
 	}
 	// Collector credentials never share the fleet management listener or its pinned leaf.
 	listeners, handlers, err = c.appendCollectorListener(o, listeners, handlers)
@@ -221,7 +256,18 @@ func (c *Controller) Listen(o ListenOptions) error {
 	c.listeners = listeners
 	c.log("Controller listeners ready", "", "info")
 	c.startManagedCollector(o)
-	return c.store.Save(c.state)
+	if err := c.store.Save(c.state); err != nil {
+		return err
+	}
+	if peer := c.master.peer; peer != nil && endpoint != "" {
+		identity, err := c.fleetIdentity()
+		if err != nil {
+			return err
+		}
+		c.wg.Add(1)
+		go c.connectMaster(peer, identity, endpoint)
+	}
+	return nil
 }
 
 // Close stops request handling, waits for operations and durably closes controller state.
@@ -231,6 +277,12 @@ func (c *Controller) Close(ctx context.Context) error {
 	c.signalOperationChange()
 	c.signalJobChange()
 	c.closeTunnels()
+	if c.master.peer != nil {
+		c.master.peer.cancel()
+	}
+	for _, session := range c.fleetSessions {
+		session.cancel()
+	}
 	servers := append([]*http.Server{}, c.servers...)
 	c.mu.Unlock()
 	// Apply listener lifecycle handling to every prepared endpoint.

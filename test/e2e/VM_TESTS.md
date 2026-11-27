@@ -1,10 +1,39 @@
 # Installed Go binary tests
 
+## Fresh K3s installation and legacy Docker upgrade
+
+Use separate disposable Ubuntu ARM64 VMs named `hostlier-k3s-only-test` and
+`hostlier-docker-test`. Install Nginx, Certbot, OpenSSL and Python 3 in both,
+and install Docker only on the legacy fixture. Copy `migration_vm.py`,
+`runtime_transition_vm.py`, the candidate controller as `next-controller`,
+and the collector bundle into each guest's `/tmp` directory.
+
+In the fresh guest, run
+`sudo python3 /tmp/runtime_transition_vm.py fresh /tmp/next-controller`.
+The test rejects Docker and standalone containerd during preview, then installs
+K3s using the reviewed default plan. It verifies cluster readiness and the
+absence of a Docker binary and socket.
+
+In the legacy guest, also stage the controller and CLI binaries from a
+pre-transition release as `/tmp/hostlier-controller` and `/tmp/hostlier`.
+Build the Linux ARM64 `./test/e2e/migration-fixture` executable and stage it as
+`/tmp/migration-fixture`. Run:
+
+```sh
+sudo python3 /tmp/runtime_transition_vm.py legacy-setup
+sudo python3 /tmp/runtime_transition_vm.py upgrade /tmp/next-controller
+```
+
+The upgrade checks candidate binary identity, the recorded runtime, Docker's
+process identity, both workload containers, trusted HTTPS, and data in the main
+and sidecar volumes. Remove the two disposable guests after testing.
+
 ## Runtime migration and rollback
 
 Use a fresh, disposable VM named exactly hostlier-runtime-migration-test, with the
-checked-in Ubuntu 24.04 Lima configuration and no host mounts. Build current Linux
-arm64 hostlier-controller, hostlier, and these test binaries:
+checked-in Ubuntu 24.04 Lima configuration and no host mounts. Stage the
+pre-transition Linux ARM64 controller and CLI for Docker fixture setup, along with
+the current controller as `/tmp/next-controller` and these test binaries:
 
     CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o /tmp/migration-fixture ./test/e2e/migration-fixture
     CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go test -c -o /tmp/hostlier-migration.test ./internal/migration
@@ -15,6 +44,8 @@ the guest's /tmp. Install Docker, Nginx, Certbot, OpenSSL and Python 3 in the gu
 Inside this VM only:
 
     sudo python3 /tmp/migration_vm.py setup
+    sudo /tmp/next-controller init --dry-run
+    sudo /tmp/next-controller init --yes
     sudo python3 /tmp/migration_vm.py exercise
     sudo python3 /tmp/migration_vm.py crash
     sudo /tmp/hostlier-migration.test -test.v
@@ -43,11 +74,11 @@ From the Hostlier module on an Apple Silicon Mac, run:
 make e2e-fleet
 ```
 
-The test needs Lima 2.2+, Go, Python 3, OpenSSH, OpenSSL, network access for Ubuntu packages, and room for four 1 GiB VMs. It builds both Linux binaries and the laptop CLI from the working tree. The first run also builds the bundled collector image if missing, which requires Docker and the collector build dependencies. [Collector build](../../collector/README.md)
+The test needs Lima 2.2+, Go, Python 3, OpenSSH, OpenSSL, network access for Ubuntu packages and K3s images, and room for four 2 GiB VMs. It builds both Linux binaries and the laptop CLI from the working tree. The first run also builds the bundled collector image if missing, which requires Docker and the collector build dependencies. [Collector build](../../collector/README.md)
 
 The command creates two masters and two boxes, approves disposable device credentials using the masters’ protected sockets, and exercises the production SSH installer. It counts one SSH invocation per box, checks the hostname returned by each laptop selection, and moves Blue to Secondary with the installed controller. It checks that Primary still has the correct enrollment and can reach Blue’s fleet port, but receives a fresh TLS identity rejection. Green remains accessible from Primary. It repeats the access checks after restarting Blue. It deletes only the VMs it created and removes its temporary keys and profiles on exit. Physical passkey interaction and public ACME issuance are outside this test.
 
-Run `FLEET_TEST_IDLE=1 make e2e-fleet` to include idle scaling on Docker and k3s. The fleet guests are removed before the k3s guest starts. To run just the k3s test:
+Run `FLEET_TEST_IDLE=1 make e2e-fleet` to include the K3s idle scaling check on the Blue member. To run just the K3s idle test:
 
 ```sh
 make e2e-k3s-idle
@@ -56,6 +87,41 @@ make e2e-k3s-idle
 This target creates a fresh 2-CPU, 4 GiB Ubuntu VM, installs the working-tree controller with `--runtime k3s`, and deploys a scratch echo service with `sleepAfter: 20s`. Docker packages the fixture image. Hostlier imports it into k3s containerd and runs it as a Kubernetes Deployment. The guest needs network access for the pinned k3s binary and its system images.
 
 The test observes one ready replica, then zero desired replicas and zero Pods. It sends one HTTPS POST, checks the echoed body and counts the matching request in the new Pod’s application log. It repeats the cycle after restarting `hostlier.service` while the Deployment is at zero, checking that the controller restart preserves the Deployment UID, generation, and zero capacity until traffic arrives. The VM and temporary credentials are removed on exit.
+
+## Remote swarm grouping and permissions on live K3s
+
+[Observed live results](../../docs/swarm-validation.md) include fixes found during this gate.
+
+Run `make e2e-k3s-swarms` from the module root on Apple Silicon with Lima, Go,
+Python 3, OpenSSL and the collector image assets available. The runner builds the
+working tree and creates a fresh 2 GiB master and 4 GiB worker, both on K3s, with
+no host mounts and no Docker installation. It uses dedicated temporary CLI
+profiles and private CA certificates. It never selects an existing server.
+
+The gate approves the worker join through the main CLI, blocks inbound port 7464
+on the worker, and exercises its outbound gRPC connection. Separate administrator,
+viewer, deploy/stop operator and group-manager logins exercise real deployment,
+filtered discovery, denied cross-group reads and writes, lifecycle permissions,
+metadata-only moves, old operation-watch denial, group deletion/recreation,
+revocation, and controller restart persistence. The scratch app is packaged
+without Docker, runs in actual Kubernetes Pods, and is probed over verified HTTPS.
+Kubernetes Deployment, Service and Pod UIDs must survive membership moves.
+Initial deployments, a replacement, and an explicit rollback must immediately
+serve the intended release marker after CLI success. A deploy-only login must
+be denied rollback. These checks distinguish the selected revision from an old
+version that might still be serving during cutover.
+Four starts and three restarts must each serve an exact echo response over HTTPS
+immediately after the CLI returns success. These probes have no grace period or
+HTTP/transport retries; deployment and move probes also fail on the first error.
+
+The runner removes only the VMs and credentials it created. Its nonsecret report
+is `/tmp/hostlier-swarms-live-report.json`. For debugging, run
+`python3 test/e2e/fleet/swarms.py --report /tmp/swarm-report.json --keep-on-failure`;
+this intentionally retains failed fixtures and reports their exact names and
+private temporary directory, which must be cleaned up afterward. Initial login
+approval uses the disposable master's protected socket; subsequent management
+uses signed remote logins and terminal confirmation. This does not test physical
+passkeys, public ACME, cloud firewall rules, or production-cluster migration.
 
 ## Existing Docker and Nginx coexistence
 
@@ -102,36 +168,36 @@ disposable test authenticator private key, so export only the report and selecte
 nonsecret snapshots, never the whole directory. Public ACME issuance, public DNS,
 and cloud firewall behavior are separate gates.
 
-## Fresh server installation
+## Installed server lifecycle
 
 Run only in disposable Ubuntu 24.04 servers. `installed_vm.py` modifies the guest's hosts file and CA trust for private `.test` hostnames. It never disables HTTPS verification. This fixture does not test public ACME.
 
-The checked-in Lima configuration uses an ARM64 Ubuntu cloud image, two CPUs, 4 GiB RAM, a 12 GiB disk, and no host filesystem mounts. On Apple Silicon with Lima installed, from the Hostlier directory:
+The checked-in Lima configuration uses an ARM64 Ubuntu cloud image, two CPUs, 4 GiB RAM, a 12 GiB disk, and no host filesystem mounts. Use current binaries for the following K3s commands on Apple Silicon with Lima installed. For Docker, first install the Docker-capable pre-transition controller, then upgrade it using current binaries and run the harness with `docker`.
 
 ```sh
 make linux
-limactl start --name=hostlier-docker-test test/e2e/lima-arm64.yaml
-limactl copy dist/hostlier-linux-arm64 hostlier-docker-test:/tmp/hostlier
-limactl copy dist/hostlier-controller-linux-arm64 hostlier-docker-test:/tmp/hostlier-controller
+limactl start --name=hostlier-k3s-test test/e2e/lima-arm64.yaml
+limactl copy dist/hostlier-linux-arm64 hostlier-k3s-test:/tmp/hostlier
+limactl copy dist/hostlier-controller-linux-arm64 hostlier-k3s-test:/tmp/hostlier-controller
 # Build collector assets as described in collector/README.md before installation.
-limactl copy -r collector/dist/collector-image hostlier-docker-test:/tmp/collector-image
-limactl shell hostlier-docker-test sudo /tmp/hostlier init --domain apps.hostlier.test --yes
-limactl copy test/e2e/installed_vm.py hostlier-docker-test:/tmp/installed_vm.py
-limactl shell hostlier-docker-test sudo python3 /tmp/installed_vm.py setup docker
-limactl shell hostlier-docker-test sudo python3 /tmp/installed_vm.py deploy docker
-limactl shell hostlier-docker-test sudo python3 /tmp/installed_vm.py dependencies docker
-limactl shell hostlier-docker-test sudo python3 /tmp/installed_vm.py domains docker
-limactl shell hostlier-docker-test sudo reboot
+limactl copy -r collector/dist/collector-image hostlier-k3s-test:/tmp/collector-image
+limactl shell hostlier-k3s-test sudo /tmp/hostlier init --domain apps.hostlier.test --yes
+limactl copy test/e2e/installed_vm.py hostlier-k3s-test:/tmp/installed_vm.py
+limactl shell hostlier-k3s-test sudo python3 /tmp/installed_vm.py setup k3s
+limactl shell hostlier-k3s-test sudo python3 /tmp/installed_vm.py deploy k3s
+limactl shell hostlier-k3s-test sudo python3 /tmp/installed_vm.py dependencies k3s
+limactl shell hostlier-k3s-test sudo python3 /tmp/installed_vm.py domains k3s
+limactl shell hostlier-k3s-test sudo reboot
 ```
 
 After SSH becomes available again, copy the harness back because the guest may clear `/tmp`, then verify recovery:
 
 ```sh
-limactl copy test/e2e/installed_vm.py hostlier-docker-test:/tmp/installed_vm.py
-limactl shell hostlier-docker-test sudo python3 /tmp/installed_vm.py verify docker
+limactl copy test/e2e/installed_vm.py hostlier-k3s-test:/tmp/installed_vm.py
+limactl shell hostlier-k3s-test sudo python3 /tmp/installed_vm.py verify k3s
 ```
 
-For k3s, use a separate fresh VM. Substitute a distinct VM name, add `--runtime k3s` to `init`, and pass `k3s` to the Python harness. Do not switch runtimes on an existing installation. `init --dry-run` can inspect the changes first; this test's `--yes` authorizes installation only. Deployments and resource provisioning still use a real PTY to approve the displayed plan.
+`init --dry-run` shows the plan before approval. The `--yes` flag here approves the installation plan. Deployments and resource provisioning use a PTY to approve their own plans.
 
 The harness exercises the actual installed CLI, systemd controller, Caddy and runtime: secure token pairing, secret upload, read-only plan, rejection of missing/noninteractive deployment approval, nginx deployment, verified HTTPS, restart, approved Redis creation, dependency credential binding, authenticated private app-to-Redis SET/GET, active-dependent protection, and domain file/API persistence. `verify` checks enabled/running services, controller access, live HTTPS, protected logs, and previously written Redis data when dependencies are configured. Invoke it after reboot to test recovery. Run modes sequentially; `domains` intentionally restarts the controller.
 

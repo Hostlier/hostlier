@@ -71,3 +71,7 @@ e2e-k3s-idle:
 control-proto:
 	protoc --go_out=. --go_opt=module=hostlier --connect-go_out=. --connect-go_opt=module=hostlier internal/controlrpc/controller.proto
 	node scripts/build-cloud-sdk.mjs
+
+.PHONY: e2e-k3s-swarms
+e2e-k3s-swarms:
+	python3 test/e2e/fleet/swarms.py --report /tmp/hostlier-swarms-live-report.json

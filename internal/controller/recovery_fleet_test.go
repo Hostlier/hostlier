@@ -3,36 +3,20 @@ package controller
 import (
 	"bytes"
 	"encoding/json"
-	"net/http/httptest"
 	"testing"
 )
 
 // enrollRecoveryHost connects the native-data fixture through the production pinned mutual-TLS listener.
 func enrollRecoveryHost(t *testing.T, f *humanFixture, host *Controller) {
 	t.Helper()
-	pin, err := f.c.FleetFingerprint()
-	// Stop the fixture on an unexpected operation result.
-	if err != nil {
-		t.Fatal(err)
-	}
-	options := ListenOptions{ControllerFingerprint: pin}
-	host.mu.Lock()
-	err = host.prepareAgentListener(&options)
-	host.mu.Unlock()
-	// Stop the fixture on an unexpected operation result.
-	if err != nil {
-		t.Fatal(err)
-	}
-	server := httptest.NewUnstartedServer(host.remoteListenerHandler(options))
-	server.TLS = options.TLSConfig
-	server.StartTLS()
-	t.Cleanup(server.Close)
+	server := fleetMasterFixture(t, f.c)
 	hostPin, err := host.FleetFingerprint()
 	// Stop the fixture on an unexpected operation result.
 	if err != nil {
 		t.Fatal(err)
 	}
-	recoveryApproved(t, f, "/v1/hosts", map[string]string{"name": "data", "url": server.URL, "fingerprint": hostPin})
+	recoveryApproved(t, f, "/v1/hosts", map[string]string{"name": "data", "url": "https://unreachable.invalid:7464", "fingerprint": hostPin})
+	connectFleetFixture(t, host, f.c, server.URL)
 }
 
 // TestRecoveryFleetSchedulingKeepsRevocationCentral prevents remote agents from retaining independent recurring approval.

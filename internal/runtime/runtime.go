@@ -42,7 +42,7 @@ type Options struct {
 	RegistryCredentials                                                                           map[string]RegistryCredential
 }
 
-// Runtime owns Docker transport, private edge access and serialized application mutations.
+// Runtime owns private edge access, application state and the selected standalone transport.
 type Runtime struct {
 	idle          *idleGateway
 	edgeMu        sync.Mutex
@@ -125,18 +125,37 @@ func New(o Options) (model.Runtime, error) {
 	if o.Type != "docker" {
 		return nil, model.Err("UNSUPPORTED_RUNTIME", "Supported runtimes are Docker and k3s")
 	}
-	o = dockerDefaults(o)
+	return newDocker(o)
+}
+
+// newDocker configures the Docker backend's Unix socket transport.
+func newDocker(o Options) (*Runtime, error) {
+	// The Docker socket default belongs to this backend alone.
+	if o.SocketPath == "" {
+		o.SocketPath = "/var/run/docker.sock"
+	}
+	r, err := newRuntimeBase(o)
+	// Invalid edge settings must fail before publishing the Docker adapter.
+	if err != nil {
+		return nil, err
+	}
+	transport := &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(ctx, "unix", o.SocketPath)
+	}}
+	r.docker = &http.Client{Transport: transport, Timeout: 3 * time.Minute}
+	return r, nil
+}
+
+// newRuntimeBase initializes edge access and state ownership for Docker and K3s.
+func newRuntimeBase(o Options) (*Runtime, error) {
+	o = runtimeDefaults(o)
 	o.CaddyAdmin = strings.TrimRight(o.CaddyAdmin, "/")
 	admin, e := url.Parse(o.CaddyAdmin)
 	// Require Caddy administration to stay on unencrypted local loopback HTTP.
 	if e != nil || admin.Scheme != "http" || !(admin.Hostname() == "localhost" || net.ParseIP(admin.Hostname()) != nil && net.ParseIP(admin.Hostname()).IsLoopback()) {
 		return nil, model.Err("CADDY_PRIVATE", "Caddy administration must use private loopback HTTP")
 	}
-	// Connect Docker requests through the configured local Unix socket.
-	transport := &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-		return (&net.Dialer{}).DialContext(ctx, "unix", o.SocketPath)
-	}}
-	return &Runtime{options: o, owner: shortHash(o.StateDir), docker: &http.Client{Transport: transport, Timeout: 3 * time.Minute}, web: &http.Client{Timeout: 15 * time.Second}}, nil
+	return &Runtime{options: o, owner: shortHash(o.StateDir), web: &http.Client{Timeout: 15 * time.Second}}, nil
 }
 
 // Name reports the stable Docker backend identifier.
@@ -469,15 +488,11 @@ func (r *Runtime) stateFile() string {
 // SupportsDependencies reports Docker's support for controller-resolved private resource networks.
 func (r *Runtime) SupportsDependencies() bool { return true }
 
-// dockerDefaults supplies local runtime paths, private endpoints and readiness bounds.
-func dockerDefaults(o Options) Options {
+// runtimeDefaults supplies shared state, private endpoints and readiness bounds.
+func runtimeDefaults(o Options) Options {
 	// Keep persistent runtime metadata under the standard protected controller directory.
 	if o.StateDir == "" {
 		o.StateDir = "/var/lib/hostlier"
-	}
-	// Use the system Docker Unix socket unless explicitly configured.
-	if o.SocketPath == "" {
-		o.SocketPath = "/var/run/docker.sock"
 	}
 	// Default Caddy administration to private loopback HTTP.
 	if o.CaddyAdmin == "" {

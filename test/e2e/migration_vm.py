@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Run only INSIDE the disposable hostlier-runtime-migration-test Ubuntu VM.
 
-Copy current hostlier-controller, hostlier, collector-image/, migration-fixture and
-this script into /tmp, install Docker/Nginx/Certbot, then run setup and exercise.
+Copy the pre-transition controller and CLI, collector-image/, migration-fixture
+and this script into /tmp. Install Docker, Nginx and Certbot, run setup, then
+upgrade the controller before exercising migration. See VM_TESTS.md.
 Uses trusted private TLS and protected local administration; never production.
 """
 import io
@@ -89,11 +90,11 @@ def ready():
     raise RuntimeError("Application/controller did not become ready")
 
 
-def setup():
+def configure_test_edge():
     check(not Path("/var/lib/hostlier/installation.json").exists(), "Fixture requires a fresh server")
     ROOT.mkdir(mode=0o700)
     os.chdir(ROOT)
-    run("systemctl", "enable", "--now", "docker", "nginx")
+    run("systemctl", "enable", "--now", "nginx")
     run("openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "2",
         "-subj", "/CN=Disposable migration CA", "-addext", "basicConstraints=critical,CA:TRUE",
         "-addext", "keyUsage=critical,keyCertSign,cRLSign", "-keyout", "ca.key", "-out", "ca.crt")
@@ -123,6 +124,11 @@ server {{
 """)
     run("nginx", "-t")
     run("systemctl", "reload", "nginx")
+
+
+def setup():
+    configure_test_edge()
+    run("systemctl", "enable", "--now", "docker")
     shutil.copy("/tmp/hostlier", "/usr/local/bin/hostlier")
     os.chmod("/usr/local/bin/hostlier", 0o755)
     run("/tmp/hostlier-controller", "init", "--domain", "apps.migration.test", "--runtime", "docker", "--yes")

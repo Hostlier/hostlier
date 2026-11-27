@@ -276,3 +276,48 @@ func TestGRPCUnixAdministration(t *testing.T) {
 		t.Fatalf("remote caller obtained local authority: %v", err)
 	}
 }
+
+// A lost member connection must interrupt and resume a watch without blocking
+// other commands or losing the operation's final durable result.
+func TestGRPCFleetWatchSurvivesMemberDisconnect(t *testing.T) {
+	f := newHumanFixture(t)
+	host, fleetServer := enrolledHostFixture(t, f, "box")
+	host.mu.Lock()
+	host.state.Operations["work"] = &Operation{ID: "work", Status: "running"}
+	host.log("started", "work", "info")
+	host.mu.Unlock()
+	remote, _, _ := grpcFixture(t, f.c, f.token)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	cut := make(chan struct{})
+	done := make(chan error, 1)
+	var dropped bool
+	go func() {
+		done <- remote.WatchOperationOn(ctx, "box", "work", "", func(ev client.OperationEvent) error {
+			if ev.Event == "log" && !dropped {
+				dropped = true
+				fleetServer.CloseClientConnections()
+				close(cut)
+			}
+			return nil
+		})
+	}()
+	select {
+	case <-cut:
+	case err := <-done:
+		t.Fatal("watch ended before disconnect", err)
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
+	host.mu.Lock()
+	host.state.Operations["work"].Status = "succeeded"
+	host.signalOperationChange()
+	host.mu.Unlock()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	waitFleetFixture(t, host, f.c)
+	if code, res := humanHTTP(t, f.c, false, "GET", "/v1/hosts/box/proxy/host-state", nil, f.token, ""); code != 200 {
+		t.Fatal(code, res)
+	}
+}

@@ -7,7 +7,7 @@ socket=/run/hostlier/controller.sock
 if [ -S "$socket" ]; then
     # Use the same local master-change endpoint as direct connect on an installed box.
     # Older controllers return 404 and continue through the release installer.
-    member=$(python3 - "$socket" "$3" <<'CHECK_MEMBER'
+    member=$(python3 - "$socket" "$3" "$4" <<'CHECK_MEMBER'
 import http.client, json, socket, sys
 
 def request(method, body=None):
@@ -31,8 +31,8 @@ if member is not None:
         sys.exit("Cannot enroll the master as its own fleet member")
     if member["master"] not in ("", pin):
         sys.exit("This box has another master. Run hostlier-controller connect on the box to switch.")
-    if not member["master"]:
-        member = request("PUT", json.dumps({"previous": "", "fingerprint": pin}))
+    if member.get("masterURL") != sys.argv[3] or not member["master"]:
+        member = request("PUT", json.dumps({"previous": member["master"], "fingerprint": pin, "url": sys.argv[3]}))
     print(json.dumps(member))
 CHECK_MEMBER
     )
@@ -62,5 +62,10 @@ if [ -S "$socket" ]; then
     own_pin=$(printf '%s' "$identity" | python3 -c 'import json,sys; print(json.load(sys.stdin)["fingerprint"])')
     [ "$own_pin" != "$3" ] || { echo 'Cannot enroll the master as its own fleet member' >&2; exit 1; }
 fi
-./hostlier-controller init --yes --domain "$1" --controller-hostname "$2" --master-fingerprint "$3" >&2
+set -- init --yes --domain "$1" --controller-hostname "$2" --master-fingerprint "$3" --master-url "$4"
+record=/var/lib/hostlier/installation.json
+if [ ! -S "$socket" ] && [ ! -e "$record" ] && [ ! -L "$record" ]; then
+    set -- "$@" --runtime k3s
+fi
+./hostlier-controller "$@" >&2
 ./hostlier hosts identity --socket "$socket" --json

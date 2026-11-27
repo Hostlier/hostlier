@@ -23,6 +23,7 @@ type Options struct {
 	H2Address                                           string
 	Directory, CertificateDirectory, ChallengeDirectory string
 	HTTPAddress, HTTPSAddress                           string
+	ControllerBodyLimitFile                             string
 	// ACMEDirectoryURL is an explicit loopback-only integration-test override.
 	// Empty uses Certbot's production directory and normal system trust.
 	ACMEDirectoryURL string

@@ -89,7 +89,7 @@ func inspectInstallationRecord(ctx context.Context, p *Plan) {
 			p.Snapshot.Installation = &installation
 			inspectProxyMigration(p, installation)
 			// Reject incompatible state before continuing the protected migration step.
-			if installation.MasterFingerprint != "" && installation.MasterFingerprint != o.MasterFingerprint {
+			if installation.MasterFingerprint != "" && (installation.MasterFingerprint != o.MasterFingerprint || installation.MasterURL != "" && installation.MasterURL != o.MasterURL) {
 				p.Errors = append(p.Errors, "This controller is already pinned to a different master.")
 			}
 			// Reject automatic migration between runtime backends.
@@ -208,7 +208,7 @@ func inspectPlatform(p *Plan) {
 	if os.Geteuid() != 0 {
 		p.Errors = append(p.Errors, "Run init as root on the target server.")
 	}
-	// Reject runtime names outside the two supported backends.
+	// An unsupported runtime cannot reach service or package activation.
 	if o.Runtime != "docker" && o.Runtime != "k3s" {
 		p.Errors = append(p.Errors, "Unsupported installation runtime.")
 	}

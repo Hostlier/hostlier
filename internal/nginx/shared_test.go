@@ -18,7 +18,8 @@ func sharedFixture(t *testing.T) SharedOptions {
 	t.Helper()
 	dir := t.TempDir()
 	o := SharedDefaults(SharedOptions{MainConfig: filepath.Join(dir, "nginx.conf"), Fragment: filepath.Join(dir, "conf.d", "zz-hostlier.conf"), StateDirectory: filepath.Join(dir, "state"), CertificatesFile: filepath.Join(dir, "tls.json"), Options: Options{CertificateDirectory: filepath.Join(dir, "certs"), ChallengeDirectory: filepath.Join(dir, "acme"), Run: func(context.Context, string, ...string) error { return nil }}}) // Capture this fixture operation independently of real host service changes.
-	if err := os.MkdirAll(filepath.Dir(o.Fragment), 0755); err != nil {                                                                                                                                                                                                                                                                                                                                                                  // Require this fixture step to succeed before checking coexistence behavior.
+	o.ControllerBodyLimitFile = filepath.Join(dir, "body-limit")
+	if err := os.MkdirAll(filepath.Dir(o.Fragment), 0755); err != nil { // Require this fixture step to succeed before checking coexistence behavior.
 		t.Fatal(err)
 	}
 	main := fmt.Sprintf("events {} http { include %s/*.conf; server { listen 80 default_server; listen 443 ssl default_server; server_name existing.example.test; } }", filepath.Dir(o.Fragment))
@@ -59,8 +60,8 @@ func TestSharedPreservesExternalConfigurationAndCertificates(t *testing.T) {
 	}
 	fragment, _ := os.ReadFile(o.Fragment)
 	assertNamedFragment(t, fragment)
-	if got := strings.Count(string(fragment), "client_max_body_size 2m;"); got != 1 {
-		t.Fatalf("expected one controller-only upload limit, got %d", got)
+	if got := strings.Count(string(fragment), "client_max_body_size 2m;"); got != 2 {
+		t.Fatalf("expected two controller-only payload limits, got %d", got)
 	}
 	if !strings.Contains(string(fragment), "client_max_body_size 1m;") || !strings.Contains(string(fragment), `location ~ "^/v1/artifacts/[a-f0-9]{64}/chunks$" { client_max_body_size 2m;`) {
 		t.Fatal("controller artifact location did not override its smaller default body limit")

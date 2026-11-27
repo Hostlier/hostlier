@@ -52,12 +52,27 @@ func (c *Controller) handleManagement(w http.ResponseWriter, r *http.Request, lo
 }
 
 // apiBodyLimit keeps the larger HTTP allowance on local administration and
-// the exact remote artifact chunk route.
+// remote routes with larger bounded payloads.
 func apiBodyLimit(r *http.Request, local bool) int64 {
-	if local || artifactChunkRoute(r) {
+	if local || largeManagementBody(r) {
 		return maxRequestBytes
 	}
 	return 1 << 20
+}
+
+// largeManagementBody covers encoded artifact chunks and deployment specifications.
+func largeManagementBody(r *http.Request) bool {
+	if r.Method != http.MethodPost {
+		return false
+	}
+	if artifactChunkRoute(r) {
+		return true
+	}
+	path := r.URL.Path
+	if _, inner, ok := model.FleetPath(path); ok {
+		path = inner
+	}
+	return path == "/v1/plans" || path == "/v1/planning"
 }
 
 // dispatchResponse freezes mutable references before releasing the lock for response writes.
@@ -83,7 +98,7 @@ func endpointNotFound() (any, error) { return nil, model.Err("NOT_FOUND", "Endpo
 // publicEndpoint identifies the minimal health and enrollment routes that need no bearer credential.
 func publicEndpoint(r *http.Request, p []string) bool {
 	// These endpoints verify hardware-key authority rather than trusting a bearer credential.
-	if publicHumanEndpoint(r) || publicEmailEndpoint(r) || publicAccessEndpoint(r) {
+	if publicFleetJoin(r) || publicHumanEndpoint(r) || publicEmailEndpoint(r) || publicAccessEndpoint(r) {
 		return true
 	}
 	// Allow unauthenticated health probes without exposing controller state.
@@ -223,16 +238,23 @@ func (c *Controller) routeAPI(r *http.Request, p []string, actor string) (any, e
 
 // routeAPIAction admits maintenance reservations before selecting the protected operation.
 func (c *Controller) routeAPIAction(r *http.Request, p []string, actor string) (any, error) {
+	if err := c.checkControlPlaneRoute(p[1]); err != nil {
+		return nil, err
+	}
 	if c.opts.Runtime.Name() == "memory" && !memoryAPISurface(p[1]) {
 		return nil, model.Err("CONTROLLER_MODE", "This capability is unavailable on a memory controller")
 	}
 	if p[1] == "memory" {
 		return c.apiMemory(r, p, actor)
 	}
+	if p[1] == "fleet-joins" {
+		return c.apiFleetJoin(r, p, actor == "local", actor)
+	}
 	// Accepted workload mutations cannot race the detached controller installer.
 	if err := c.checkMaintenanceMutation(r); err != nil {
 		return nil, err
 	}
+	if p[1] == "swarms" { return c.apiSwarms(r,p,actor) }
 	// Controller maintenance retains the same authenticated and approved dispatcher.
 	if p[1] == "controller" {
 		return c.apiControllerMaintenance(r, p, actor)
@@ -321,7 +343,7 @@ func errorStatus(code string) int {
 	// Map safe public errors to stable HTTP semantics.
 	switch code {
 	// Exporters must retry transient diagnostic storage failures.
-	case "TELEMETRY_UNAVAILABLE":
+	case "TELEMETRY_UNAVAILABLE", "HOST_UNAVAILABLE":
 		status = 503
 	// Require authentication for unavailable bearer identities.
 	case "UNAUTHORIZED":
@@ -330,10 +352,10 @@ func errorStatus(code string) int {
 	case "INVALID_ENROLLMENT", "APPROVAL_REQUIRED", "HUMAN_APPROVAL_REQUIRED", "HUMAN_NOT_ENROLLED", "HUMAN_ORIGIN", "HUMAN_VERIFICATION", "APPROVAL_INVALID":
 		status = 403
 	// Hide unavailable or actor-inaccessible identities behind a not-found response.
-	case "NOT_FOUND":
+	case "NOT_FOUND", "SWARM_NOT_FOUND":
 		status = 404
 	// Report state conflicts so callers review current state before retrying.
-	case "STALE_PLAN", "ROUTE_CONFLICT", "APP_BUSY", "SECRET_IN_USE", "IDEMPOTENCY_CONFLICT", "PLAN_CONSUMED", "DOMAIN_IN_USE", "RESOURCE_BUSY", "RESOURCE_IN_USE", "RESOURCE_CONFLICT", "CONFIG_CHANGED":
+	case "SWARM_EXISTS", "SWARM_NOT_EMPTY", "SWARM_BUSY", "SWARM_MEMBERSHIP", "STALE_PLAN", "ROUTE_CONFLICT", "APP_BUSY", "SECRET_IN_USE", "IDEMPOTENCY_CONFLICT", "PLAN_CONSUMED", "DOMAIN_IN_USE", "RESOURCE_BUSY", "RESOURCE_IN_USE", "RESOURCE_CONFLICT", "CONFIG_CHANGED":
 		status = 409
 	// Tell callers to back off when enrollment capacity is exhausted.
 	case "RATE_LIMITED", "ENROLLMENT_LIMIT":

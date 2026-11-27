@@ -180,6 +180,7 @@ jobs:
         env:
           TARGET_ARCH: ${{ matrix.arch }}
         run: |
+          go test -mod=readonly ./internal/controllercmd -run '^Test(MacInit|ControlPlane)'
           mkdir -p dist/releases
           binary="hostlier-controller-darwin-${TARGET_ARCH}"
           CGO_ENABLED=0 GOWORK=off GOOS=darwin GOARCH="$TARGET_ARCH" \

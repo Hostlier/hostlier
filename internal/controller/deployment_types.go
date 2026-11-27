@@ -15,6 +15,7 @@ type Revision struct {
 
 // Application combines active deployment state with retained rollback history.
 type Application struct {
+	SwarmID       string                          `json:"swarmId,omitempty"`
 	MemorySources map[string]model.MemoryIdentity `json:"memorySources,omitempty"`
 	ProductPolicy *workflow.ProductPolicy         `json:"productPolicy,omitempty"`
 	ResourceRefs  map[string]string               `json:"resourceRefs,omitempty"`
@@ -27,7 +28,9 @@ type Application struct {
 
 // Plan captures immutable actor-bound changes for explicit approval.
 type Plan struct {
+	SwarmID         string                          `json:"swarmId,omitempty"`
 	MemorySources   map[string]model.MemoryIdentity `json:"memorySources,omitempty"`
+	RequiredActions []string                        `json:"requiredActions,omitempty"`
 	StatefulSource  bool                            `json:"statefulSource,omitempty"`
 	Workflow        []WorkflowPlan                  `json:"workflow,omitempty"`
 	RestoreBackupID string                          `json:"restoreBackupId,omitempty"`
@@ -48,6 +51,7 @@ type Plan struct {
 
 // Operation tracks durable accepted work and its terminal or recovery outcome.
 type Operation struct {
+	SwarmID         string                          `json:"swarmId,omitempty"`
 	MemorySources   map[string]model.MemoryIdentity `json:"memorySources,omitempty"`
 	Workflow        []WorkflowPlan                  `json:"workflow,omitempty"`
 	SupersededBy    string                          `json:"supersededBy,omitempty"`

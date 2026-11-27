@@ -1,0 +1,8 @@
+syntax = "proto3";
+package hostlier.fleet.v1;
+import "google/protobuf/wrappers.proto";
+// Each nonempty frame contains at most 64 KiB of the reverse TLS/HTTP2 connection.
+// The enrolled controller initiates this mutually authenticated gRPC stream.
+service Fleet {
+  rpc Connect(stream google.protobuf.BytesValue) returns (stream google.protobuf.BytesValue);
+}

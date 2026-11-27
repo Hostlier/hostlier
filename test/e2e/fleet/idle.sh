@@ -5,8 +5,9 @@ cd /tmp
 role=$1
 host="$role.fleet.test"
 route="echo.$host"
+runtime=$(python3 -c 'import json; print(json.load(open("/var/lib/hostlier/installation.json"))["runtime"])')
 interval=3s
-if [ "$role" = k3s ]; then interval=20s; fi
+if [ "$runtime" = k3s ]; then interval=20s; fi
 printf '127.0.0.1 %s\n' "$route" >> /etc/hosts
 python3 - "$host" "$route" <<'PY'
 import json, sys
@@ -36,7 +37,7 @@ sleepAfter: $interval
 YAML
 sock=/run/hostlier/controller.sock
 hostlier deploy --file /tmp/echo.hostlier --socket "$sock"
-if [ "$role" = k3s ]; then
+if [ "$runtime" = k3s ]; then
     exec python3 /tmp/k3s_idle.py "$route"
 fi
 # The deployment imports a content-addressed tag. Read the exact primary runtime ID.

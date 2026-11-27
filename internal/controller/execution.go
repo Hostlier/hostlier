@@ -290,6 +290,7 @@ func (c *Controller) recordDeployment(op *Operation, result operationResult) {
 	revisions = append(revisions, revision)
 	c.state.Applications[op.Name] = &Application{ProductPolicy: c.nextProductPolicy(op.Spec), ResourceRefs: result.resourceRefs, Deployment: deployment, Spec: op.Spec, SecretRefs: op.SecretRefs, Revision: op.ID, Revisions: revisions}
 	c.state.Applications[op.Name].MemorySources = op.MemorySources
+	c.recordSwarmDeployment(op)
 }
 
 // actionStatus maps lifecycle actions to their durable observed state.

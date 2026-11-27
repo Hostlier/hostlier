@@ -30,9 +30,10 @@ func runInit(ctx context.Context, args []string, in io.Reader, out, errOut io.Wr
 	flags := flag.NewFlagSet("hostlier-controller init", flag.ContinueOnError)
 	flags.SetOutput(errOut)
 	options := installer.Options{}
-	flags.StringVar(&options.MasterFingerprint, "master-fingerprint", "", "pin the master controller on the dedicated fleet listener")
+	flags.StringVar(&options.MasterURL, "master-url", "", "master fleet gRPC HTTPS origin (usually port 7464)")
+	flags.StringVar(&options.MasterFingerprint, "master-fingerprint", "", "pin the master controller for outbound fleet gRPC")
 	flags.StringVar(&options.Domain, "domain", "", "server application domain")
-	flags.StringVar(&options.Runtime, "runtime", "", "auto, docker or k3s")
+	flags.StringVar(&options.Runtime, "runtime", "", "auto or k3s for new installations; docker for existing Docker installations")
 	flags.StringVar(&options.Proxy, "proxy", "", "auto, caddy, nginx, nginx-existing or nginx-gateway")
 	flags.StringVar(&options.ControllerHostname, "controller-hostname", "", "controller hostname")
 	flags.StringVar(&options.StateDir, "state-dir", "", "controller state directory")
@@ -148,23 +149,8 @@ func installReviewed(ctx context.Context, plan installer.Plan, executable string
 	if !plan.Supported {
 		return model.Err("INSTALL_PREFLIGHT", "Installation preflight failed; resolve the reported conflicts")
 	}
-	// Noninteractive installations require an explicit --yes at this command boundary.
-	if !yes {
-		confirm := deps.confirm
-		// Ordinary command use requires a real terminal before reading approval input.
-		if confirm == nil {
-			// Bind the current terminal streams without exposing installation state.
-			confirm = func() (bool, error) { return confirmInstallation(in, errOut) }
-		}
-		approved, err := confirm()
-		// Input failures and declined reviews must leave the server unchanged.
-		if err != nil {
-			return err
-		}
-		// Declining is never implicit approval.
-		if !approved {
-			return model.Err("CANCELLED", "Cancelled; no changes applied")
-		}
+	if err := approveInstallation(yes, in, errOut, deps.confirm); err != nil {
+		return err
 	}
 	// The server release installs its controller without requiring a client binary.
 	if deps.apply == nil {
@@ -181,6 +167,23 @@ func installReviewed(ctx context.Context, plan installer.Plan, executable string
 	}
 	_, err = fmt.Fprintf(out, "\nHostlier controller installed at https://%s\n", plan.ControllerHostname)
 	return err
+}
+
+func approveInstallation(yes bool, in io.Reader, errOut io.Writer, confirm func() (bool, error)) error {
+	if yes {
+		return nil
+	}
+	if confirm == nil {
+		confirm = func() (bool, error) { return confirmInstallation(in, errOut) }
+	}
+	approved, err := confirm()
+	if err != nil {
+		return err
+	}
+	if !approved {
+		return model.Err("CANCELLED", "Installation cancelled")
+	}
+	return nil
 }
 
 // installationProgress writes live status to stderr so stdout stays a plan or result stream.

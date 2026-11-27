@@ -79,3 +79,55 @@ For a restricted connection, to create a secret from your laptop, list its name 
 Use `authorizations list`, `authorizations revoke ID`, or `clients revoke ID` with an all-access credential, owner approval or an explicit administration socket. `security revoke --fingerprint PASSKEY_OR_HARDWARE_ID --socket PATH` invalidates that approver's grants and pending approvals. Passkey IDs are returned at enrollment. Lost owner credentials can be recovered only through protected server administration. Use `hostlier connect PROFILE` for expired credentials or a different scope; approval is never automatic.
 
 Legacy `connect --email`, `connect --request`, and `connect --token-stdin` remain available. They do not silently gain deployment authority from this change.
+
+
+## Action permissions
+
+The main CLI can approve a new controller without logging in to the master's server:
+
+```sh
+hostlier server approve APPROVAL_CODE --server primary
+```
+
+The signed-in device needs `servers.add` or all access. This command confirms the exact member identity in the terminal, uses the existing signed login, and never opens a browser. Starting a member join still requires local administration of that member (`sudo hostlier-controller connect HTTPS_MASTER`); merely submitting a join request grants no access.
+
+An administrator with all access can grant an existing device a bounded set of actions:
+
+```sh
+hostlier access authorize --server primary --device DEVICE_ID --on local \
+  --scope actions --actions servers.add --for 2h --max-uses 5
+
+hostlier access authorize --server primary --device DEVICE_ID --on worker-1 \
+  --scope actions --actions apps.deploy,apps.rollback,apps.stop,sidecars.remove \
+  --app api --secrets api-token --for 2h --max-uses 20
+```
+
+Use `hostlier access clients list --server primary` to find device IDs. Grants supplement an active device credential; they do not revive an expired or revoked login. Only an owner or all-access administrator can issue grants. App grants select exact apps or an explicit swarm on a single server, pinned to its enrolled controller identity. Server administration grants use `--on local` on the master.
+
+| Permission | Allows |
+| --- | --- |
+| `servers.add` | Approve joins or enroll servers, with fleet inventory and connectivity reads |
+| `servers.remove` | Revoke server enrollment, with fleet inventory and connectivity reads |
+| `apps.deploy` | Prepare and apply stateless deployments for named apps |
+| `apps.rollback` | Prepare and apply a retained revision for named apps |
+| `apps.scale` | Change capacity for named apps |
+| `apps.start`, `apps.stop`, `apps.restart` | The corresponding app lifecycle action |
+| `apps.remove` | Delete an app while retaining its data |
+| `apps.purge` | Also delete data; requires `apps.remove` for a purge |
+| `sidecars.remove` | Remove a sidecar during a deployment or rollback; requires that base action too |
+| `swarms.view` | Discover groups and read apps within the granted group |
+| `swarms.manage` | Administer groups and membership; workload actions and issuing grants require separate authority |
+
+Deploying or scaling to zero also requires `apps.stop`. The controller derives these requirements from the resolved plan, including rollback contents and sidecar differences; changing a command spelling or calling the API directly cannot bypass them. A single grant must cover the complete change. Unknown actions are rejected. Unmapped operations remain denied for action-only credentials.
+
+Action grants retain the existing 1 minute–8 hours and 1–100 approval limits. Each approved mutation reserves a use. Named-app status/log reads and the device's own plans and operations are included. Secret values cannot be read; deployments may use only explicitly named secrets. As with bounded deployment grants, plans with persistent volumes, dependencies or workflows, and replacements of existing stateful apps, require owner/all-access authority. Existing `all` grants remain administrative. Legacy `deploy` windows continue to allow ordinary deployments, but newly prepared plans that roll back, scale, stop capacity, or remove a sidecar require the corresponding action grant.
+
+To issue an action-only login during CLI pairing, a server administrator can run:
+
+```sh
+sudo hostlier access pairing code REQUEST_ID \
+  --actions servers.add --for 2h --max-uses 5 \
+  --socket /run/hostlier/controller.sock
+```
+
+An app permission requires `--app APP[,APP]` or an explicit `--swarm NAME`. With `--swarm`, omitting `--app` covers the whole group. Without it, app grants remain in `default`. See [grouping and permission examples](swarms.md). Supplying invalid or incomplete restrictions never grants all access. Revoking the device, grant, or approving key blocks subsequent access and pending execution. Review and revoke grants with `hostlier access authorizations list` and `hostlier access authorizations revoke ID`.

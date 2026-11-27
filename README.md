@@ -70,3 +70,5 @@ the [controller gRPC route](STREAMING.md) over HTTP/2.
 
 To build Hostlier from source or contribute, see the [build guide](docs/guides/build.md)
 and [validation notes](VALIDATION.md).
+
+See [application grouping and swarm permissions](docs/guides/swarms.md) for the K3s-only grouping CLI.

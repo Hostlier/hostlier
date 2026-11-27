@@ -6,9 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"net/url"
 	"strings"
-	"time"
 
 	"hostlier/internal/fleet"
 	"hostlier/internal/model"
@@ -78,7 +76,7 @@ func (c *Controller) apiHosts(r *http.Request, p []string, actor string) (any, e
 	// Apply this check before granting authority or advancing protocol state.
 	if matches(r, p, "GET", 3, "identity") {
 		pin, err := fleet.Fingerprint(c.state.FleetIdentity.Certificate)
-		return map[string]string{"certificate": c.state.FleetIdentity.Certificate, "fingerprint": pin}, err
+		return map[string]string{"certificate": c.state.FleetIdentity.Certificate, "fingerprint": pin, "url": c.fleetEndpoint()}, err
 	}
 	// Apply this check before granting authority or advancing protocol state.
 	if matches(r, p, "POST", 2, "") {
@@ -94,7 +92,14 @@ func (c *Controller) apiHosts(r *http.Request, p []string, actor string) (any, e
 		if _, ok := c.state.Hosts[p[2]]; !ok {
 			return endpointNotFound()
 		}
+		pin := c.state.Hosts[p[2]].Fingerprint
 		delete(c.state.Hosts, p[2])
+		if !c.enrolledPin(pin) {
+			if session := c.fleetSessions[pin]; session != nil {
+				session.cancel()
+				delete(c.fleetSessions, pin)
+			}
+		}
 		// Evaluate each retained grant without expanding its signed scope.
 		for _, grant := range c.state.Authorizations {
 			// Apply this check before granting authority or advancing protocol state.
@@ -117,7 +122,7 @@ func (c *Controller) enrollHost(r *http.Request) (any, error) {
 		return nil, err
 	}
 	// Reject the request before side effects: Host URL must be an HTTPS origin.
-	if !validHostURL(host.URL) {
+	if host.URL != "" && !validHostURL(host.URL) {
 		return nil, model.Err("INVALID_HOST", "Host URL must be an HTTPS origin")
 	}
 	// Reject the request before side effects: Host requires a simple name and exact SHA-256 certificate fingerprint.
@@ -160,22 +165,26 @@ func (c *Controller) proxyHost(r *http.Request, id, inner, actor string) (any, e
 	if err == nil {
 		err = c.trackRemoteBackupPolicy(r, host, inner, result)
 	}
+	if err == nil && r.Method == "GET" {
+		if device := c.state.Clients[actor]; device != nil {
+			if err := c.checkScopedRoute(r, device); err != nil {
+				return nil, err
+			}
+		}
+		if strings.HasPrefix(inner, "/v1/swarms") {
+			return c.filterFleetSwarms(actor, host, inner, result)
+		}
+	}
 	return result, err
 }
 
 // fleetRequest pins both peers, preserves actor identity and never retries an ambiguous mutation.
 func (c *Controller) fleetRequest(ctx context.Context, host HostRecord, method, path string, body []byte, actor string, binding *fleetBinding) (any, error) {
-	identity, err := c.fleetIdentity()
-	// Propagate failure rather than continuing with incomplete or unverified state.
+	transport, err := c.fleetTransport(host)
 	if err != nil {
 		return nil, err
 	}
-	config, err := fleet.TLS(identity, host.Fingerprint, false)
-	// Propagate failure rather than continuing with incomplete or unverified state.
-	if err != nil {
-		return nil, err
-	}
-	request, err := http.NewRequestWithContext(ctx, method, host.URL+path, bytes.NewReader(body))
+	request, err := http.NewRequestWithContext(ctx, method, "https://fleet.invalid"+path, bytes.NewReader(body))
 	// Propagate failure rather than continuing with incomplete or unverified state.
 	if err != nil {
 		return nil, err
@@ -187,8 +196,6 @@ func (c *Controller) fleetRequest(ctx context.Context, host HostRecord, method, 
 		data, _ := json.Marshal(binding.Generation)
 		request.Header.Set("X-Hostlier-Generation", string(data))
 	}
-	transport := &http.Transport{TLSClientConfig: config, TLSHandshakeTimeout: 10 * time.Second}
-	defer transport.CloseIdleConnections()
 	// Keep this callback bounded to the current request and its captured state.
 	client := &http.Client{Transport: transport, Timeout: c.opts.LongOperationTimeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	// Network work must not block central approval, status or other hosts.
@@ -260,13 +267,31 @@ func (c *Controller) reviewHostIntent(request humanRequest, actor string, review
 		}
 		review["plan"] = result
 	}
+	if len(parts) >= 3 && parts[1] == "apps" {
+		result, err := c.fleetRequest(c.ctx, host, "GET", "/v1/apps/"+parts[2], nil, actor, request.Target)
+		if err != nil {
+			return nil, err
+		}
+		data, _ := json.Marshal(result)
+		var app Application
+		if json.Unmarshal(data, &app) != nil {
+			return nil, model.Err("HOST_PROTOCOL", "Invalid host application membership")
+		}
+		review["swarmId"] = model.SwarmName(app.SwarmID)
+	}
+	if len(parts) >= 3 && parts[1] == "swarms" {
+		group, err := c.remoteSwarm(id, parts[2], actor)
+		if err != nil {
+			return nil, err
+		}
+		review["swarm"] = group
+	}
 	return json.Marshal(review)
 }
 
 // validHostURL prevents enrollment from smuggling credentials, query parameters or alternate paths.
 func validHostURL(value string) bool {
-	parsed, err := url.Parse(value)
-	return err == nil && parsed.Scheme == "https" && parsed.Hostname() != "" && parsed.User == nil && parsed.Path == "" && parsed.RawQuery == "" && parsed.Fragment == ""
+	return fleet.ValidURL(value)
 }
 
 // decodeHostResponse bounds peer data and preserves structured errors without accepting ambiguous success.

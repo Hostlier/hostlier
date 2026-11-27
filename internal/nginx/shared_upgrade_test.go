@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-// oldSharedControllerFixture models an owned include published before chunk-specific body limits.
+// oldSharedControllerFixture models an owned include published before route-specific body limits.
 func oldSharedControllerFixture(t *testing.T, o SharedOptions) []byte {
 	t.Helper()
 	writeLiveCertificates(t, o.Options, 1)
@@ -28,15 +28,20 @@ func oldSharedControllerFixture(t *testing.T, o SharedOptions) []byte {
 	}
 	server := string(current[start:end])
 	server = strings.Replace(server, " client_max_body_size 1m;\n", "", 1)
-	location := strings.Index(server, ` location ~ "^/v1/artifacts/[a-f0-9]{64}/chunks$"`)
-	if location < 0 {
-		t.Fatal("chunk location missing from fixture")
+	for _, prefix := range []string{
+		` location ~ "^/v1/artifacts/[a-f0-9]{64}/chunks$"`,
+		` location ~ "^/v1/(hosts/[^/]+/proxy/)?(plans|planning)$"`,
+	} {
+		location := strings.Index(server, prefix)
+		if location < 0 {
+			t.Fatalf("missing fixture location %q", prefix)
+		}
+		lineEnd := strings.IndexByte(server[location:], '\n')
+		if lineEnd < 0 {
+			t.Fatalf("unterminated fixture location %q", prefix)
+		}
+		server = server[:location] + server[location+lineEnd+1:]
 	}
-	lineEnd := strings.IndexByte(server[location:], '\n')
-	if lineEnd < 0 {
-		t.Fatal("unterminated chunk location")
-	}
-	server = server[:location] + server[location+lineEnd+1:]
 	server = strings.Replace(server, " location / {", " location ^~ / {", 1)
 	legacy := append([]byte{}, current[:start]...)
 	legacy = append(legacy, server...)
@@ -79,8 +84,14 @@ func TestUpgradeSharedControllerPreservesAppRoutesAndCertificates(t *testing.T) 
 	if !bytes.Equal(legacy[:oldStart], updated[:newStart]) || !bytes.Equal(legacy[oldEnd:], updated[newEnd:]) {
 		t.Fatal("application routes or other owned configuration changed")
 	}
-	if !bytes.Contains(updated[newStart:newEnd], []byte(`location ~ "^/v1/artifacts/[a-f0-9]{64}/chunks$" { client_max_body_size 2m;`)) || !bytes.Contains(updated[newStart:newEnd], []byte("client_max_body_size 1m;")) {
-		t.Fatal("controller chunk body limit was not published")
+	for _, directive := range []string{
+		"client_max_body_size 1m;",
+		`location ~ "^/v1/artifacts/[a-f0-9]{64}/chunks$" { client_max_body_size 2m;`,
+		`location ~ "^/v1/(hosts/[^/]+/proxy/)?(plans|planning)$" { client_max_body_size 2m;`,
+	} {
+		if !bytes.Contains(updated[newStart:newEnd], []byte(directive)) {
+			t.Fatalf("updated controller route is missing %q", directive)
+		}
 	}
 	mainAfter, _ := os.ReadFile(o.MainConfig)
 	certAfter, _ := os.ReadFile(certPath)
@@ -96,6 +107,26 @@ func TestUpgradeSharedControllerPreservesAppRoutesAndCertificates(t *testing.T) 
 	// A repeat init must not reload Nginx when the owned controller route is current.
 	if err := UpgradeSharedController(context.Background(), o, "controller.example.test", "127.0.0.1:7463"); err != nil || len(commands) != 2 {
 		t.Fatal("unchanged controller route was republished", commands, err)
+	}
+	if err := os.WriteFile(o.ControllerBodyLimitFile, []byte("0\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := UpgradeSharedController(context.Background(), o, "controller.example.test", "127.0.0.1:7463"); err != nil {
+		t.Fatal(err)
+	}
+	unlimited, err := os.ReadFile(o.Fragment)
+	if err != nil {
+		t.Fatal(err)
+	}
+	start, end, err := sharedControllerServerSpan(unlimited, o.HTTPSAddress, "controller.example.test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(unlimited[start:end], []byte("client_max_body_size 0;")) || bytes.Count(unlimited[start:end], []byte("client_max_body_size ")) != 1 {
+		t.Fatal("controller route did not publish the operator's override")
+	}
+	if !bytes.Equal(updated[:newStart], unlimited[:start]) || !bytes.Equal(updated[newEnd:], unlimited[end:]) {
+		t.Fatal("body limit override changed application routes")
 	}
 }
 

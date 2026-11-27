@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
 
@@ -13,8 +14,20 @@ func (c *Controller) makePlan(r *http.Request, actor string) (any, error) {
 	if c.opts.Runtime.Name() == "memory" {
 		return c.makeMemoryPlan(r, actor)
 	}
+	body, err := deviceRequestBody(r)
+	if err != nil {
+		return nil, err
+	}
+	var intent deploymentPlanRequest
+	if err := json.Unmarshal(body, &intent); err != nil {
+		return nil, model.Err("INVALID_REQUEST", "Invalid deployment intent")
+	}
 	spec, exact, err := c.planSpecification(r)
 	// Stop planning when immutable runtime inputs cannot be resolved.
+	if err != nil {
+		return nil, err
+	}
+	swarmID, err := c.planSwarm(&spec, intent)
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +72,12 @@ func (c *Controller) makePlan(r *http.Request, actor string) (any, error) {
 	if model.HasVolumes(spec) {
 		strategy = "stop-start with interruption; data retained"
 	}
-	plan := &Plan{Workflow: workflowPlans, Dependencies: dependencies, ID: random(), Spec: spec, SecretRefs: refs, Generation: c.state.Generation, ExpiresAt: c.opts.Now().Add(c.opts.PlanTTL).UnixMilli(), Actor: actor, Changes: map[string]any{"productPolicy": c.nextProductPolicy(spec), "runtime": c.state.Runtime, "url": route.URL, "image": spec.Image, "secrets": refs, "volumes": spec.Volumes, "storageQuotaEnforced": false, "updateStrategy": strategy, "dependencies": dependencies, "workflow": workflowPlans, "warnings": warnings, "namespaceImage": spec.NamespaceImage, "sidecars": spec.Sidecars, "endpoint": spec.Endpoint, "endpoints": spec.Endpoints, "configs": spec.Configs, "security": spec.Security, "shutdown": spec.Shutdown, "resources": c.resourceChanges(spec)}}
+	plan := &Plan{SwarmID: swarmID, Workflow: workflowPlans, Dependencies: dependencies, ID: random(), Spec: spec, SecretRefs: refs, Generation: c.state.Generation, ExpiresAt: c.opts.Now().Add(c.opts.PlanTTL).UnixMilli(), Actor: actor, Changes: map[string]any{"productPolicy": c.nextProductPolicy(spec), "runtime": c.state.Runtime, "url": route.URL, "image": spec.Image, "secrets": refs, "volumes": spec.Volumes, "storageQuotaEnforced": false, "updateStrategy": strategy, "dependencies": dependencies, "workflow": workflowPlans, "warnings": warnings, "namespaceImage": spec.NamespaceImage, "sidecars": spec.Sidecars, "endpoint": spec.Endpoint, "endpoints": spec.Endpoints, "configs": spec.Configs, "security": spec.Security, "shutdown": spec.Shutdown, "resources": c.resourceChanges(spec)}}
+	// Preparation may release the controller lock; reject a membership change before publishing the plan.
+	if err := c.validatePlanSwarm(plan); err != nil {
+		return nil, err
+	}
+	plan.RequiredActions = deploymentActions(intent.Action, spec, c.state.Applications[spec.Name])
 	plan.StatefulSource = c.statefulSource(spec.Name)
 	plan.Fingerprint = config.Fingerprint(plan)
 	c.state.Plans[plan.ID] = plan
@@ -102,6 +120,11 @@ func (c *Controller) applyPlan(r *http.Request, id, actor string) (any, error) {
 	if plan.ExpiresAt <= c.opts.Now().UnixMilli() || plan.Generation != c.state.Generation {
 		return nil, model.Err("STALE_PLAN", "Plan expired or server changed; review new plan")
 	}
+	if !resourcePlanKind(plan.Kind) {
+		if err := c.validatePlanSwarm(plan); err != nil {
+			return nil, err
+		}
+	}
 	// Recheck public route reservations only for application deployments.
 	if !resourcePlanKind(plan.Kind) && plan.Spec.Kind != "memory" {
 		// Preserve route reservations held by other active or accepted applications.
@@ -115,7 +138,7 @@ func (c *Controller) applyPlan(r *http.Request, id, actor string) (any, error) {
 		kind = plan.Kind
 		name = plan.ResourceSpec.Name
 	}
-	op := &Operation{Workflow: plan.Workflow, RestoreBackupID: plan.RestoreBackupID, Dependencies: plan.Dependencies, ResourceSpec: plan.ResourceSpec, ID: random(), Kind: kind, Name: name, Spec: plan.Spec, SecretRefs: plan.SecretRefs, Status: "queued", PlanID: plan.ID, Fingerprint: plan.Fingerprint, Actor: actor}
+	op := &Operation{SwarmID: plan.SwarmID, Workflow: plan.Workflow, RestoreBackupID: plan.RestoreBackupID, Dependencies: plan.Dependencies, ResourceSpec: plan.ResourceSpec, ID: random(), Kind: kind, Name: name, Spec: plan.Spec, SecretRefs: plan.SecretRefs, Status: "queued", PlanID: plan.ID, Fingerprint: plan.Fingerprint, Actor: actor}
 	op.MemorySources = plan.MemorySources
 	plan.OperationID = op.ID
 	plan.RequestID = b.RequestID

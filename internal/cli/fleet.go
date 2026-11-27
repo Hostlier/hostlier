@@ -36,10 +36,10 @@ func (s *session) hosts() error {
 		}
 		return s.print(result)
 	}
-	return model.Err("ARGUMENTS", "Usage: hosts list|identity; hosts enroll NAME --url https://HOST:PORT --fingerprint SHA256; hosts revoke NAME")
+	return model.Err("ARGUMENTS", "Usage: hosts list|identity; hosts enroll NAME --fingerprint SHA256 [--url https://HOST:PORT]; hosts revoke NAME")
 }
 
-// validHostEnrollment requires an explicit peer name, HTTPS endpoint and verified fingerprint.
+// validHostEnrollment requires an explicit peer name and verified fingerprint.
 func (s *session) validHostEnrollment() bool {
-	return s.sub == "enroll" && s.target != "" && s.flags["url"] != "" && fleet.ValidPin(s.flags["fingerprint"])
+	return s.sub == "enroll" && s.target != "" && fleet.ValidPin(s.flags["fingerprint"])
 }

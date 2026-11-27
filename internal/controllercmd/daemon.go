@@ -25,11 +25,17 @@ import (
 
 // runController loads runtime and server settings before listening until shutdown.
 func (s *session) runController() error {
+	if s.flags["mode"] == controller.ControlPlaneMode {
+		return s.runControlPlane()
+	}
+	if s.flags["tls-cert"] != "" || s.flags["tls-key"] != "" || s.flags["fleet-address"] != "" {
+		return model.Err("CONTROLLER_MODE", "TLS and fleet address overrides require --mode control-plane")
+	}
 	if s.flags["mode"] == "memory" {
 		return s.runMemoryController()
 	}
 	if s.flags["mode"] != "" && s.flags["mode"] != "compute" {
-		return model.Err("CONTROLLER_MODE", "Mode must be compute or memory")
+		return model.Err("CONTROLLER_MODE", "Mode must be compute, memory or control-plane")
 	}
 	var e error
 
@@ -89,8 +95,16 @@ func (s *session) runController() error {
 // serveInstalledController owns the daemon listeners until the command is cancelled.
 func (s *session) serveInstalledController(server *controller.Controller, host string, port int) error {
 	socket := defaultValue(s.flags["socket"], "/run/hostlier/controller.sock")
+	fleetAddress := ":" + fleet.Port
+	if s.flags["mode"] == "memory" {
+		fleetAddress = ""
+	}
+	return s.serveController(server, controller.ListenOptions{MasterURL: s.flags["master-url"], FleetAddress: fleetAddress, MasterFingerprint: s.flags["master-fingerprint"], SocketPath: socket, Host: host, Port: port, TCP: true, ControllerFingerprint: s.flags["controller-fingerprint"]})
+}
+
+func (s *session) serveController(server *controller.Controller, listeners controller.ListenOptions) error {
 	// Abort startup when the configured listener cannot be opened.
-	if e := server.Listen(controller.ListenOptions{MasterFingerprint: s.flags["master-fingerprint"], SocketPath: socket, Host: host, Port: port, TCP: true, ControllerFingerprint: s.flags["controller-fingerprint"]}); e != nil {
+	if e := server.Listen(listeners); e != nil {
 		server.Close(context.Background())
 		return e
 	}
@@ -117,7 +131,6 @@ type controllerSettings struct {
 
 // controllerSettings validates server configuration and builds runtime dependencies.
 func (s *session) controllerSettings(stateDir string) (controllerSettings, error) {
-	var e error
 	var installed installedController
 	// Reuse recorded installation settings when the installation manifest is readable.
 	if data, e := os.ReadFile(filepath.Join(stateDir, "installation.json")); e == nil {
@@ -130,14 +143,9 @@ func (s *session) controllerSettings(stateDir string) (controllerSettings, error
 	if !allowedControllerBind(host, s.flags["controller-fingerprint"]) {
 		return controllerSettings{}, model.Err("LISTENER", "Controller must bind loopback behind the selected reverse proxy")
 	}
-	port := 7463
-	// Parse an explicitly configured port before constructing listener settings.
-	if s.flags["port"] != "" {
-		port, e = strconv.Atoi(s.flags["port"])
-		// Reject this path: Invalid controller port.
-		if e != nil || port < 1 || port > 65535 {
-			return controllerSettings{}, model.Err("PORT", "Invalid controller port")
-		}
+	port, err := controllerPort(s.flags["port"])
+	if err != nil {
+		return controllerSettings{}, err
 	}
 	proxy, err := s.selectedProxy(installed.Proxy)
 	// Reject unsupported edge selections before constructing the runtime.
@@ -147,6 +155,17 @@ func (s *session) controllerSettings(stateDir string) (controllerSettings, error
 
 	settings := controllerSettings{runtime: runtime, hostname: hostname, host: host, proxy: proxy, port: port}
 	return settings, upgradeInstalledNginxEdge(s.ctx, stateDir, settings)
+}
+
+func controllerPort(value string) (int, error) {
+	if value == "" {
+		return 7463, nil
+	}
+	port, err := strconv.Atoi(value)
+	if err != nil || port < 1 || port > 65535 {
+		return 0, model.Err("PORT", "Invalid controller port")
+	}
+	return port, nil
 }
 
 // selectedProxy preserves the installation selection unless an explicit reviewed proxy was requested.

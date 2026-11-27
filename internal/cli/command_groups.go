@@ -14,6 +14,7 @@ type helpEntry struct {
 
 // rootCommands expose domains; individual application and administration actions live below them.
 var rootCommands = []helpEntry{
+	{"swarm", "Group K3s applications and manage membership"},
 	{"memory", "Deploy and mount confined host storage"},
 	{"init", "Create an app deployment configuration"},
 	{"app", "Deploy and manage applications"},
@@ -58,6 +59,7 @@ var commandGroups = map[string][]helpEntry{
 	"server": {
 		{"ssh", "Open a shell or run a Linux command over SSH"},
 		{"join", "Connect this installed box to a master"},
+		{"approve", "Approve a controller join using your login"},
 		{"add", "Install a controller and enroll it with the selected master"},
 		{"list", "List saved server profiles"},
 		{"use", "Select a server profile"},
@@ -127,7 +129,7 @@ func routeArguments(parsed arguments) (arguments, error) {
 	}
 	parsed.commandPath = group + " " + action
 	// Server profile actions already use this positional shape.
-	if group == "server" && (action == "ssh" || action == "join" || action == "add" || action == "list" || action == "use") {
+	if group == "server" && (action == "approve" || action == "ssh" || action == "join" || action == "add" || action == "list" || action == "use") {
 		return parsed, nil
 	}
 	args := append([]string(nil), parsed.args[:offset]...)

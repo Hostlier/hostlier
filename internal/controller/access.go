@@ -45,7 +45,7 @@ func (c *Controller) apiAccess(r *http.Request, p []string, actor string) (any, 
 // browserOrigin rejects cross-site browser requests before allocating or consuming ceremonies.
 func (c *Controller) browserOrigin(r *http.Request) error {
 	// Reject the request: Use the controller's own HTTPS page.
-	if r.Header.Get("Origin") != "https://"+c.state.Hostname || r.Header.Get("Sec-Fetch-Site") == "cross-site" {
+	if r.Header.Get("Origin") != c.publicOrigin() || r.Header.Get("Sec-Fetch-Site") == "cross-site" {
 		return model.Err("UNAUTHORIZED", "Use the controller's own HTTPS page")
 	}
 	return nil

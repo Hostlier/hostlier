@@ -21,7 +21,11 @@ import (
 var serverInstallScript string
 
 func (s *session) installServerSSH(target serverInstall, master, dir string) (string, error) {
-	remote := "sh -c " + quoteSSHArgument(serverInstallScript) + " hostlier " + quoteSSHArgument(target.domain) + " " + quoteSSHArgument(target.hostname) + " " + quoteSSHArgument(master)
+	endpoint, err := s.masterEndpoint()
+	if err != nil {
+		return "", err
+	}
+	remote := "sh -c " + quoteSSHArgument(serverInstallScript) + " hostlier " + quoteSSHArgument(target.domain) + " " + quoteSSHArgument(target.hostname) + " " + quoteSSHArgument(master) + " " + quoteSSHArgument(endpoint)
 	remote = "set -- " + remote + "; if [ \"$(id -u)\" = 0 ]; then exec \"$@\"; else exec sudo -n -- \"$@\"; fi"
 	args := append(s.sshArguments(), "-o", "ControlMaster=no", "-o", "ControlPath=none", "--", s.target, remote)
 	ctx, cancel := context.WithTimeout(s.ctx, 30*time.Minute)

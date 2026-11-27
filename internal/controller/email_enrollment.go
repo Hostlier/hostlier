@@ -185,18 +185,22 @@ func deviceRequestBody(r *http.Request) ([]byte, error) {
 	return body, nil
 }
 
-// deviceRequestLimit permits negotiated artifact chunks without enlarging other signed requests.
+// deviceRequestLimit gives signed payloads the same allowance on routes that need larger bodies.
 func deviceRequestLimit(r *http.Request) int64 {
-	// Only bounded artifact chunk writes need room for a MiB encoded as JSON/base64.
-	if artifactChunkRoute(r) {
+	if largeManagementBody(r) {
 		return maxRequestBytes
 	}
 	return 131072
 }
 
-// artifactChunkRoute selects the one remote endpoint that needs a larger body.
+// artifactChunkRoute matches writes to a specific artifact's chunk endpoint.
 func artifactChunkRoute(r *http.Request) bool {
-	p := strings.Split(r.URL.Path, "/")
+	path := r.URL.Path
+	// Fleet uploads retain the exact chunk route and bounds of direct uploads.
+	if _, inner, ok := model.FleetPath(path); ok {
+		path = inner
+	}
+	p := strings.Split(path, "/")
 	if r.Method != http.MethodPost || len(p) != 5 || p[0] != "" || p[1] != "v1" || p[2] != "artifacts" || p[4] != "chunks" || len(p[3]) != 64 {
 		return false
 	}

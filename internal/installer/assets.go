@@ -31,11 +31,21 @@ func InstallationAssets(o Options) (Assets, error) {
 		return Assets{}, e
 	}
 	fleetArgs := ""
+	// An optional fleet pin is supplied only to controllers explicitly enrolled to a master.
 	if o.MasterFingerprint != "" {
+		// The exact fingerprint is safe for literal systemd interpolation.
 		if !fleet.ValidPin(o.MasterFingerprint) {
 			return Assets{}, model.Err("INVALID_HOST", "Master fingerprint must be an exact SHA-256 certificate fingerprint")
 		}
 		fleetArgs = " --master-fingerprint " + o.MasterFingerprint
+		if o.MasterURL != "" {
+			if !fleet.ValidURL(o.MasterURL) {
+				return Assets{}, model.Err("INVALID_HOST", "Master URL must be a fleet HTTPS origin")
+			}
+			fleetArgs += " --master-url " + o.MasterURL
+		}
+	} else if o.MasterURL != "" {
+		return Assets{}, model.Err("INVALID_HOST", "Master URL requires a fingerprint")
 	}
 	a := Assets{Service: fmt.Sprintf(`[Unit]
 Description=Hostlier controller
@@ -86,6 +96,7 @@ ReadWritePaths=/var/lib/caddy
 		return Assets{}, loginError
 	}
 	ordinary, rpc := "127.0.0.1:7463", "127.0.0.1:7463"
+	// The shared-gateway mode carries conventional HTTP and RPC on distinct private ports.
 	if o.Proxy == "nginx-gateway" {
 		ordinary, rpc = "127.0.0.1:14443", "127.0.0.1:14444"
 	}
@@ -100,23 +111,23 @@ ReadWritePaths=/var/lib/caddy
 	if externalDocker(o) {
 		a.Service = strings.ReplaceAll(a.Service, "Requires=docker.service\n", "")
 	}
-	// Only the two reviewed reverse proxies can own public listeners.
-	if o.Proxy == "nginx-gateway" {
+	return installationProxyAssets(o, a, e)
+}
+
+// installationProxyAssets chooses the independently reviewed edge configuration.
+func installationProxyAssets(o Options, a Assets, caddyError error) (Assets, error) {
+	switch o.Proxy { // Runtime choice does not imply a different edge.
+	case "nginx-gateway": // The gateway owns public protocol forwarding and its private listener.
 		return nginxGatewayAssets(o, a)
-	}
-	// Direct standalone Nginx retains its independent public TLS ownership.
-	if o.Proxy == "nginx" {
+	case "nginx": // Standalone Nginx owns its public TLS listeners.
 		return nginxAssets(o, a)
-	}
-	// Coexistence uses the operator's running services and writes no replacement units for them.
-	if o.Proxy == "nginx-existing" {
+	case "nginx-existing": // Coexistence uses the operator's running service.
 		return sharedNginxAssets(o, a)
-	}
-	// Reject unknown proxy selections before installation preview.
-	if o.Proxy != "caddy" {
+	case "caddy": // The direct Caddy renderer uses the assets already generated above.
+		return a, caddyError
+	default: // An unknown proxy selection cannot produce an installation preview.
 		return Assets{}, supportedGatewayProxyError()
 	}
-	return a, e
 }
 
 // validateInstallationPaths protects the controller destination and literal systemd arguments.

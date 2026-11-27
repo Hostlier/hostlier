@@ -125,3 +125,25 @@ func TLS(identity Identity, peerPin string, server bool) (*tls.Config, error) {
 	cfg.VerifyPeerCertificate = func(raw [][]byte, _ [][]*x509.Certificate) error { return verifyPeer(raw, peerPin, usage) }
 	return cfg, nil
 }
+
+// ServerTLS admits only currently enrolled identities. The callback is also
+// checked when a session registers, closing the handshake/revocation race.
+func ServerTLS(identity Identity, enrolled func(string) bool) (*tls.Config, error) {
+	cert, err := tls.X509KeyPair([]byte(identity.Certificate), []byte(identity.PrivateKey))
+	if err != nil {
+		return nil, err
+	}
+	return &tls.Config{MinVersion: tls.VersionTLS13, Certificates: []tls.Certificate{cert}, NextProtos: []string{"h2"}, ClientAuth: tls.RequireAnyClientCert,
+		VerifyPeerCertificate: func(raw [][]byte, _ [][]*x509.Certificate) error {
+			if len(raw) == 0 {
+				return errors.New("fleet peer certificate required")
+			}
+			sum := sha256.Sum256(raw[0])
+			pin := hex.EncodeToString(sum[:])
+			if !enrolled(pin) {
+				return errors.New("fleet peer is not enrolled")
+			}
+			return verifyPeer(raw, pin, x509.ExtKeyUsageClientAuth)
+		},
+	}, nil
+}

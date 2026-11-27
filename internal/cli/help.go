@@ -14,6 +14,10 @@ func topLevelHelp() string {
 
 // showCommandHelp resolves command groups and leaf help without contacting a controller.
 func (s *session) showCommandHelp() bool {
+	if s.command == "swarm" || s.command == "help" && s.sub == "swarm" {
+		s.message(swarmHelp)
+		return true
+	}
 	if s.command == "memory" || (s.command == "help" && s.sub == "memory") || strings.HasPrefix(s.parsed.commandPath, "memory ") {
 		s.message(memoryHelp)
 		return true

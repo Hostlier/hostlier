@@ -19,7 +19,7 @@ func (c *Controller) setupCLIFromAdministrator(r *http.Request, actor string) (a
 	}
 	address, err := model.ControllerURL(input.URL)
 	// A wrong SSH host must never mint a link for another controller.
-	if err != nil || address != "https://"+c.state.Hostname {
+	if err != nil || address != c.publicOrigin() {
 		return nil, model.Err("CONTROLLER_MISMATCH", "SSH target does not match the requested HTTPS controller")
 	}
 	// The pending device must actually exist on this controller.

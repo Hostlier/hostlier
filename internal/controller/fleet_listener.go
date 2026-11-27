@@ -60,7 +60,7 @@ func (c *Controller) serveHostAgent(w http.ResponseWriter, r *http.Request, pin 
 	authority := hostAuthority{Actor: "controller:" + actor}
 	authority.Peer, _ = r.Context().Value(masterPeerKey{}).(*masterPeer)
 	// Apply this check before granting authority or advancing protocol state.
-	if !agentWatch(r.URL.Path) && model.RequiresHumanApproval(r.Method, r.URL.Path) {
+	if !agentWatch(r.URL.Path) && (model.RequiresHumanApproval(r.Method, r.URL.Path) || r.Header.Get("X-Hostlier-Generation") != "") {
 		generation, err := strconv.ParseInt(r.Header.Get("X-Hostlier-Generation"), 10, 64)
 		// Propagate failure rather than continuing with incomplete or unverified state.
 		if err != nil || generation < 0 {

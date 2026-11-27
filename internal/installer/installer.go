@@ -95,8 +95,8 @@ func Inspect(ctx context.Context, o Options) (Plan, error) {
 	inspectCollector(&p)
 	describeInstallation(&p)
 	if o.MasterFingerprint != "" {
-		p.Changes = append(p.Changes, "Serve fleet workload requests on TCP "+fleet.Port+" using mutual TLS pinned to master "+o.MasterFingerprint)
-		p.Warnings = append(p.Warnings, "Allow the master to reach TCP "+fleet.Port+" through host and provider firewalls.")
+		p.Changes = append(p.Changes, "Connect outbound to master "+o.MasterURL+" using gRPC and pinned mutual TLS")
+		p.Warnings = append(p.Warnings, "Allow outbound TCP "+fleet.Port+" to the master. Member controllers need no inbound fleet firewall rule.")
 	}
 	p.Changes = append(p.Changes, "Install the bundled minimal telemetry image and automatically manage one collector per Docker host or Kubernetes node")
 	// Make local credential sharing and read-only home access explicit in the installation preview.
@@ -165,7 +165,7 @@ func Apply(ctx context.Context, p Plan, o ApplyOptions) error {
 		return e
 	}
 	report("completed")
-	a := &installationRunner{ctx: ctx, plan: p, options: o, assets: assets, progress: Installation{MasterFingerprint: p.MasterFingerprint, DockerLogin: p.DockerLogin, DockerMode: p.DockerMode, Proxy: p.Proxy, Runtime: p.Runtime, Hostname: p.ControllerHostname, ControllerHostname: p.ControllerHostname, Completed: []string{}, FirewallRules: []int{}}}
+	a := &installationRunner{ctx: ctx, plan: p, options: o, assets: assets, progress: Installation{MasterURL: p.MasterURL, MasterFingerprint: p.MasterFingerprint, DockerLogin: p.DockerLogin, DockerMode: p.DockerMode, Proxy: p.Proxy, Runtime: p.Runtime, Hostname: p.ControllerHostname, ControllerHostname: p.ControllerHostname, Completed: []string{}, FirewallRules: []int{}}}
 	// Persist ownership and retry metadata before package services can start.
 	a.report("preparation", "started")
 	if err := a.prepare(); err != nil {
@@ -178,7 +178,7 @@ func Apply(ctx context.Context, p Plan, o ApplyOptions) error {
 		name string
 		run  func() error
 	}{{"collector-image", a.collectorImage}, {"packages", a.packages}, {"configuration", a.configuration}, {"firewall", a.firewall}, {"k3s", a.k3s}, {"services", a.services}, {"edge-readiness", a.edgeReadiness}, {"controller-readiness", a.controllerReadiness}, {"collector-readiness", a.collectorReadiness}} {
-		// Do not record a cluster stage for a Docker-only installation.
+		// Cluster preparation belongs to the K3s backend.
 		if step.name == "k3s" && p.Runtime != "k3s" {
 			continue
 		}

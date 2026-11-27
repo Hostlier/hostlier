@@ -8,7 +8,7 @@ import (
 
 // TestExistingNginxInstallationPreservesExternalServices audits every installation command in coexistence mode.
 func TestExistingNginxInstallationPreservesExternalServices(t *testing.T) {
-	assets, err := InstallationAssets(Options{Domain: "example.com", Proxy: "nginx-existing", DockerMode: "existing"})
+	assets, err := InstallationAssets(Options{Domain: "example.com", Runtime: "docker", Proxy: "nginx-existing", DockerMode: "existing"})
 	if err != nil { // Require this fixture step to succeed before checking coexistence behavior.
 		t.Fatal(err)
 	}

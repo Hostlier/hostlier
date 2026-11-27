@@ -168,10 +168,7 @@ func protectedUpdatePath(stateDir string) error {
 
 // startVerifiedInit reuses the release's installer after complete bundle verification.
 func startVerifiedInit(ctx context.Context, executable string, installed installer.Installation, domain string, options updateOptions, in io.Reader, out, errOut io.Writer) error {
-	initArgs := []string{"init", "--domain", domain, "--controller-hostname", installed.ControllerHostname, "--runtime", installed.Runtime, "--proxy", installed.Proxy, "--state-dir", options.stateDir, "--config", options.configPath}
-	if installed.MasterFingerprint != "" {
-		initArgs = append(initArgs, "--master-fingerprint", installed.MasterFingerprint)
-	}
+	initArgs := updateInitArgs(installed, domain, options.stateDir, options.configPath)
 	if options.dry {
 		initArgs = append(initArgs, "--dry-run")
 	} else if options.yes {

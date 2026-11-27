@@ -33,14 +33,11 @@ func newK3s(o Options) (model.Runtime, error) {
 		}
 	}
 
-	copy := o
-	copy.Type = "docker"
-	adapter, e := New(copy)
+	base, e := newRuntimeBase(o)
 	// Require valid private edge configuration from the shared runtime initializer.
 	if e != nil {
 		return nil, e
 	}
-	base := adapter.(*Runtime)
 	base.stateFilename = "runtime-k3s.json"
 	// Use the pinned distribution's bundled kubectl command by default.
 	if o.KubeBinary == "" {
@@ -238,6 +235,7 @@ func (k *K3s) K3sManifests(spec model.Project, dc model.DeployContext) ([]map[st
 		env = append(env, map[string]string{"name": name, "value": value})
 	}
 	container := map[string]any{"name": "app", "image": spec.Image, "ports": []any{map[string]any{"containerPort": spec.Port}}, "env": env, "volumeMounts": mounts}
+	useImportedK3sImage(container, spec.Image)
 	// Store resolved secret bindings in a version-scoped Kubernetes Secret.
 	if len(dc.Secrets) > 0 {
 		manifests = append(manifests, map[string]any{"apiVersion": "v1", "kind": "Secret", "metadata": k.metadata(spec.Name, version), "type": "Opaque", "stringData": dc.Secrets})

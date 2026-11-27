@@ -107,7 +107,7 @@ class Fleet:
         config = self.stage / (role + ".yaml")
         config.write_text(template)
         name = self.names[role]
-        size = ["--memory=4", "--cpus=2"] if role == "k3s" else ["--memory=1", "--cpus=1"]
+        size = ["--memory=4", "--cpus=2"] if role == "k3s" else ["--memory=2", "--cpus=2"]
         run("limactl", "create", "--tty=false", *size, "--name=" + name, config)
         self.created.append(name)
         run("limactl", "start", "--tty=false", name)
@@ -116,7 +116,9 @@ class Fleet:
         host = role + ".fleet.test"
         self.copy(role, self.stage / "ca.crt", self.stage / (host + ".crt"), self.stage / (host + ".key"),
                   ROOT / "test/e2e/fleet/guest.sh")
-        self.shell(role, "sudo", "bash", "/tmp/guest.sh", host)
+        needs_image_builder = role == "k3s" or (role == "blue" and os.environ.get("FLEET_TEST_IDLE") == "1")
+        options = ["--with-image-builder"] if needs_image_builder else []
+        self.shell(role, "sudo", "bash", "/tmp/guest.sh", host, *options)
 
     def set_network(self):
         network = next(line.split()[2] for line in run("limactl", "network", "list").splitlines() if line.split()[0] == "user-v2")
@@ -204,12 +206,41 @@ class Fleet:
                 proc.wait()
             os.close(fd)
 
+    def join_controller(self, member, master):
+        # The member has no browser or user credential; the master approves in a PTY.
+        command = ["limactl", "shell", "--workdir=/tmp", self.names[member], "sudo",
+                   "hostlier-controller", "connect", f"https://{master}.fleet.test"]
+        proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        output, approved = b"", False
+        deadline = time.monotonic() + 150
+        try:
+            while time.monotonic() < deadline:
+                if not select.select([proc.stdout], [], [], 1)[0]:
+                    continue
+                chunk = os.read(proc.stdout.fileno(), 32768)
+                if not chunk:
+                    break
+                output += chunk
+                match = re.search(rb"Approval code: ([A-F0-9]{8}-[A-F0-9]{8})", output)
+                if match and not approved:
+                    self.shell(master, "sudo", "script", "-qefc",
+                               "hostlier-controller approve " + match[1].decode(), "/dev/null", input="yes\n")
+                    approved = True
+            require(approved and proc.wait(timeout=5) == 0,
+                    "Controller join failed: " + output.decode()[-1500:])
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait()
+            proc.stdout.close()
+
     def cli(self, *args):
         return json.loads(run(self.stage / "laptop", *args, "--json", env=self.env))
 
     def status(self, role, *args):
         result = self.cli("status", *args)
         require(result.get("hostname") == role + ".fleet.test", "Unexpected workload identity: " + repr(result.get("hostname")))
+        require(result.get("runtime") == "k3s", "Fresh fleet member is using another runtime: " + repr(result.get("runtime")))
 
     def exercise(self):
         for master in MASTERS:
@@ -220,6 +251,7 @@ class Fleet:
             args = ["server", "add"] if role == "blue" else ["connect"]
             record = self.cli(*args, self.users[role] + "@" + role + ".fleet.test", "--ssh-config", str(self.stage / "ssh.config"))
             pins[role] = record["fingerprint"]
+            self.shell(role, "sudo", "iptables", "-I", "INPUT", "-p", "tcp", "--dport", "7464", "-j", "REJECT")
             require(self.ssh_count() == expected, f"{role} did not use exactly one bootstrap SSH connection")
             self.status("primary" if role == "blue" else "green")
         require(pins["blue"] != pins["green"], "Box controller identities must be distinct")
@@ -227,8 +259,7 @@ class Fleet:
             self.cli("server", "use", selection)
             self.status(role)
         print("PASS two SSH sessions, selection preserved by add and changed by connect, four laptop switches", flush=True)
-        self.pair("secondary", ["limactl", "shell", "--workdir=/tmp", self.names["blue"], "sudo", "script", "-qefc",
-                                "hostlier-controller connect https://secondary.fleet.test", "/dev/null"])
+        self.join_controller("blue", "secondary")
         for restarted in (False, True):
             if restarted:
                 self.shell("blue", "sudo", "systemctl", "restart", "hostlier")
@@ -237,14 +268,11 @@ class Fleet:
             for master in MASTERS:
                 record = self.cli("server", "list", master)["hosts"]["blue"]
                 require(record["fingerprint"] == pins["blue"], "Enrollment pin changed on " + master)
-            self.shell("primary", "python3", "-c", "import socket; socket.create_connection(('blue.fleet.test', 7464), 5).close()")
-            cursor = self.shell("blue", "sudo", "journalctl", "-u", "hostlier", "-n0", "--show-cursor")
-            cursor = cursor.split("-- cursor: ")[-1].strip()
+            self.shell("blue", "python3", "-c", "import socket; socket.create_connection(('secondary.fleet.test', 7464), 5).close()")
             denied = subprocess.run([self.stage / "laptop", "status", "--server", "primary", "--on", "blue"], env=self.env,
                                     capture_output=True, text=True, timeout=30)
-            require(denied.returncode and "Enrolled host unreachable" in denied.stderr, "Former master unexpectedly reached Blue or failed for another reason")
-            log = self.shell("blue", "sudo", "journalctl", "-u", "hostlier", "--after-cursor", cursor)
-            require("fleet peer identity mismatch" in log, "No fresh TLS rejection from Blue")
+            require(denied.returncode and "no active outbound connection" in denied.stderr,
+                    "Former master retained a reverse session or failed for another reason")
             print("PASS handoff and old master denied" + (" after restart" if restarted else ""), flush=True)
         require(self.ssh_count() == 2, "Workload access reopened SSH")
 
@@ -253,9 +281,7 @@ class Fleet:
         binary = self.stage / "echo-service"
         run("go", "build", "-o", binary, "./test/e2e/fleet/fixture",
             env=dict(os.environ, GOOS="linux", GOARCH="arm64", CGO_ENABLED="0"))
-        files = [binary, ROOT / "test/e2e/fleet/idle.sh"]
-        if role == "k3s":
-            files.append(ROOT / "test/e2e/fleet/k3s_idle.py")
+        files = [binary, ROOT / "test/e2e/fleet/idle.sh", ROOT / "test/e2e/fleet/k3s_idle.py"]
         self.copy(role, *files)
         result = self.shell(role, "sudo", "bash", "/tmp/idle.sh", role, timeout=900)
         print("\n".join(line for line in result.splitlines() if line.startswith("PASS")), flush=True)
@@ -304,7 +330,7 @@ def run_fleet(fleet, bundles):
     with concurrent.futures.ThreadPoolExecutor(3) as pool:
         list(pool.map(fleet.create, ROLES[1:]))
     fleet.set_network()
-    print("Preparing Docker, Nginx and guest TLS", flush=True)
+    print("Preparing Nginx and guest TLS", flush=True)
     with concurrent.futures.ThreadPoolExecutor(4) as pool:
         list(pool.map(fleet.provision, ROLES))
     for role in MASTERS:

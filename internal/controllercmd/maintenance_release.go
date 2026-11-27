@@ -59,6 +59,9 @@ func updateInitArgs(installed installer.Installation, domain, stateDir, configPa
 	// Retain the installed fleet trust pin instead of selecting a new controller.
 	if installed.MasterFingerprint != "" {
 		args = append(args, "--master-fingerprint", installed.MasterFingerprint)
+		if installed.MasterURL != "" {
+			args = append(args, "--master-url", installed.MasterURL)
+		}
 	}
 	return args
 }

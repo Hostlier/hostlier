@@ -12,11 +12,13 @@ import (
 
 // Authorization grants one device bounded deployment authority after a fresh hardware signature.
 type Authorization struct {
+	SwarmID         string   `json:"swarmId,omitempty"`
 	ID              string   `json:"id"`
 	Device          string   `json:"device"`
 	Host            string   `json:"host"`
 	HostFingerprint string   `json:"hostFingerprint,omitempty"`
 	Apps            []string `json:"apps"`
+	Actions         []string `json:"actions,omitempty"`
 	Secrets         []string `json:"secrets,omitempty"`
 	CreateSecrets   []string `json:"createSecrets,omitempty"`
 	Scope           string   `json:"scope"`
@@ -38,9 +40,11 @@ type humanExecutionKey struct{}
 
 // authorizationRequest contains explicit scope and finite lifetime/usage bounds.
 type authorizationRequest struct {
+	Swarm           string   `json:"swarm,omitempty"`
 	Device          string   `json:"device"`
 	Host            string   `json:"host"`
 	Apps            []string `json:"apps"`
+	Actions         []string `json:"actions,omitempty"`
 	Secrets         []string `json:"secrets,omitempty"`
 	CreateSecrets   []string `json:"createSecrets,omitempty"`
 	Scope           string   `json:"scope"`
@@ -118,7 +122,14 @@ func (c *Controller) createAuthorization(r *http.Request) (any, error) {
 	if input.Host != "local" {
 		pin = c.state.Hosts[input.Host].Fingerprint
 	}
-	grant := &Authorization{ID: random(), Device: input.Device, Host: input.Host, HostFingerprint: pin, Apps: input.Apps, Secrets: input.Secrets, CreateSecrets: input.CreateSecrets, Scope: input.Scope, ExpiresAt: c.opts.Now().Add(time.Duration(input.DurationSeconds) * time.Second).UnixMilli(), MaxUses: input.MaxUses, KeyFingerprint: approval.CredentialID, AppPrefix: input.AppPrefix, MaxApps: input.MaxApps, RouteDomain: input.RouteDomain, KeepApps: input.KeepApps}
+	swarmID, err := c.authorizationSwarm(input.Host, input.Swarm, approval.Actor)
+	if err != nil {
+		return nil, err
+	}
+	if !c.canGrantAuthority(approval) {
+		return nil, model.Err("HUMAN_VERIFICATION", "Grant issuer authority changed")
+	}
+	grant := &Authorization{SwarmID: swarmID, ID: random(), Device: input.Device, Host: input.Host, HostFingerprint: pin, Apps: input.Apps, Actions: input.Actions, Secrets: input.Secrets, CreateSecrets: input.CreateSecrets, Scope: input.Scope, ExpiresAt: c.opts.Now().Add(time.Duration(input.DurationSeconds) * time.Second).UnixMilli(), MaxUses: input.MaxUses, KeyFingerprint: approval.CredentialID, AppPrefix: input.AppPrefix, MaxApps: input.MaxApps, RouteDomain: input.RouteDomain, KeepApps: input.KeepApps}
 	c.state.Authorizations[grant.ID] = grant
 	c.state.Generation++
 	c.log("Bounded deployment authority granted: "+grant.ID, "", "info")
@@ -127,6 +138,9 @@ func (c *Controller) createAuthorization(r *http.Request) (any, error) {
 
 // validateAuthorization requires explicit device, host, application and finite authority limits.
 func (c *Controller) validateAuthorization(input authorizationRequest) error {
+	if input.Swarm != "" && (input.Scope != "actions" || !model.ValidSwarmName(input.Swarm)) {
+		return model.Err("INVALID_AUTHORIZATION", "Named swarm selection requires action permissions and a valid swarm name")
+	}
 	device := c.state.Clients[input.Device]
 	// Reject the request before side effects: Select an enrolled device with a bound public key.
 	if device == nil || device.Revoked || device.PublicKey == "" {
@@ -134,7 +148,7 @@ func (c *Controller) validateAuthorization(input authorizationRequest) error {
 	}
 	// Reject the request before side effects: Deployment authority requires 1–20 apps, 1–100 uses, and a duration from one minute to eight hours.
 	if !validAuthorizationLimits(input) {
-		return model.Err("INVALID_AUTHORIZATION", "Deployment authority requires 1–20 apps or an app prefix, 1–100 uses, and a duration from one minute to eight hours")
+		return model.Err("INVALID_AUTHORIZATION", "Specify exact apps for deployment actions (or a deploy sandbox prefix), valid action names, 1–100 uses, and a duration from one minute to eight hours")
 	}
 	// Reject the request before side effects: Select local or an enrolled host.
 	if err := c.validateAuthorizationHost(input.Host); err != nil {
@@ -183,7 +197,7 @@ func (c *Controller) authorizationLive(grant *Authorization) bool {
 // applyAuthorization uses the approved all-access or bounded deployment grant.
 func (c *Controller) applyAuthorization(a *HumanApproval, request humanRequest) {
 	// Full authority still follows the retained approval and execution checks.
-	if c.applyAllAccessAuthorization(a) {
+	if c.applyAllAccessAuthorization(a) || c.applyActionAuthorization(a, request) {
 		return
 	}
 	// Creation grants cannot authorize updates or other secret operations.
@@ -215,6 +229,13 @@ func (c *Controller) applyAuthorization(a *HumanApproval, request humanRequest) 
 
 // grantAllowsPlan checks host pinning, secret exposure and sandbox routes for one plan.
 func grantAllowsPlan(grant *Authorization, plan Plan, request humanRequest) bool {
+	if !grantSwarmMatches(grant, plan.SwarmID) {
+		return false
+	}
+	// Legacy deploy windows cannot substitute for newly separated destructive capabilities.
+	if grant.Scope == "deploy" && len(plan.RequiredActions) != 0 && !deployOnlyActions(plan.RequiredActions) {
+		return false
+	}
 	// Remote hosts remain pinned to the enrolled identity.
 	if request.Target != nil && grant.HostFingerprint != request.Target.Fingerprint {
 		return false
@@ -293,12 +314,15 @@ func (c *Controller) hasLiveAuthorization(actor string) bool {
 
 // validAuthorizationLimits caps both the duration and the maximum damage of delegated authority.
 func validAuthorizationLimits(input authorizationRequest) bool {
-	return !(input.Scope != "deploy" || len(input.Apps) == 0 && input.AppPrefix == "" || len(input.Apps) > 20 || len(input.Secrets) > 20 || input.DurationSeconds < 60 || input.DurationSeconds > 28800 || input.MaxUses < 1 || input.MaxUses > 100)
+	if input.Scope == "actions" {
+		return validActionLimits(input)
+	}
+	return !(len(input.Actions) != 0 || input.Scope != "deploy" || len(input.Apps) == 0 && input.AppPrefix == "" || len(input.Apps) > 20 || len(input.Secrets) > 20 || input.DurationSeconds < 60 || input.DurationSeconds > 28800 || input.MaxUses < 1 || input.MaxUses > 100)
 }
 
 // grantMatches checks immutable deployment scope and remaining capacity before reserving a use.
 func (c *Controller) grantMatches(grant *Authorization, actor, host, app string) bool {
-	return c.authorizationLive(grant) && grant.Device == actor && grant.Host == host && grant.Uses < grant.MaxUses && c.grantCanDeploy(grant, app)
+	return c.authorizationLive(grant) && grant.Scope == "deploy" && grant.Device == actor && grant.Host == host && grant.Uses < grant.MaxUses && c.grantCanDeploy(grant, app)
 }
 
 // statelessPlan excludes provisioning or replacing data-bearing workloads from deployment windows.

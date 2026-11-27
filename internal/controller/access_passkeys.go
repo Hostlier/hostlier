@@ -12,7 +12,7 @@ import (
 
 // passkeyVerifier fixes RP ID and origin from trusted controller configuration, never request headers.
 func (c *Controller) passkeyVerifier() (*webauthn.WebAuthn, error) {
-	origin := "https://" + c.state.Hostname
+	origin := c.publicOrigin()
 	u, err := url.Parse(origin)
 	// Stop when validation or proof verification fails.
 	if err != nil {
@@ -61,7 +61,7 @@ func (c *Controller) ownerEnrollmentLink(name string) (string, int64, error) {
 	expires := c.opts.Now().Add(10 * time.Minute)
 	c.access.Bootstraps[verifier(token)] = expires
 	c.log("Passkey enrollment link created by server administrator", "", "info")
-	return "https://" + c.state.Hostname + "/security#enroll=" + token, expires.UnixMilli(), nil
+	return c.publicOrigin() + "/security#enroll=" + token, expires.UnixMilli(), nil
 }
 
 // beginPasskeyRegistration requires the administrator bootstrap secret and a same-origin browser.

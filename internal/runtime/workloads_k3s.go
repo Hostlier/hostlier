@@ -84,6 +84,7 @@ func (k *K3s) extendPod(p model.Project, version string, values map[string]strin
 	for _, name := range model.MemberNames(p) {
 		member := p.Sidecars[name]
 		container := map[string]any{"name": name, "image": member.Image, "restartPolicy": "Always"}
+		useImportedK3sImage(container, member.Image)
 		configureGroupContainer(container, member, name, version, values)
 		container["startupProbe"] = groupProbe(member)
 		// Optional sidecars never make the Pod unready after startup.
@@ -98,13 +99,16 @@ func (k *K3s) extendPod(p model.Project, version string, values map[string]strin
 	pod["terminationGracePeriodSeconds"] = grace
 }
 
-// configureGroupContainer selects probes and credentials without inheriting sibling values.
-func configureGroupContainer(c map[string]any, p model.Project, member, version string, values map[string]string) {
-	// Prepared images are present locally and must never fall back to remote pulls.
-	if artifact.IsImage(p.Image) {
-		c["image"] = artifact.RuntimeImage(p.Image)
+// useImportedK3sImage selects the containerd tag for a verified local artifact.
+func useImportedK3sImage(c map[string]any, image string) {
+	if artifact.IsImage(image) {
+		c["image"] = artifact.RuntimeImage(image)
 		c["imagePullPolicy"] = "Never"
 	}
+}
+
+// configureGroupContainer selects probes and credentials without inheriting sibling values.
+func configureGroupContainer(c map[string]any, p model.Project, member, version string, values map[string]string) {
 	delete(c, "envFrom")
 	c["env"] = groupEnvironment(p, member, version, values)
 	c["readinessProbe"] = groupProbe(p)

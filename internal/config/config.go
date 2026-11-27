@@ -135,6 +135,9 @@ func ParseRoute(value string, domains []string, reservedHost string) (model.Rout
 
 // ValidateProject validates and normalizes a project in declaration order.
 func ValidateProject(p model.Project) (model.Project, error) {
+	if err := ValidateSwarm(p); err != nil {
+		return p, err
+	}
 	if p.Kind == "memory" {
 		return validateMemoryProject(p)
 	}

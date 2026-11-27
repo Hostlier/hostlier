@@ -10,13 +10,13 @@ import (
 )
 
 // authorizeUsage documents both exact-name and sandbox windows.
-const authorizeUsage = "Usage: authorize --device ID --on local|HOST (--app APP[,APP] | --app-prefix PREFIX- --max-apps N [--route-domain DOMAIN] [--keep-apps]) --scope deploy --for 2h [--max-uses 20 --secrets NAME[,NAME] --key FILE]"
+const authorizeUsage = "Usage: authorize --device ID --on local|HOST (--app APP[,APP] | --app-prefix PREFIX- --max-apps N [--route-domain DOMAIN] [--keep-apps]) --scope deploy --for 2h [--max-uses 20 --secrets NAME[,NAME] --key FILE]\nAction permissions: authorize --device ID --on local|HOST --scope actions --actions servers.add|apps.deploy,apps.rollback [--app APP[,APP]] --for 2h [--max-uses 20]"
 
 // authorize requests an explicitly bounded window and optionally signs it in the owner's local terminal.
 func (s *session) authorize() error {
 	duration, err := time.ParseDuration(s.flags["for"])
 	// Reject the request before side effects: exactly one of --app or --app-prefix is required.
-	if err != nil || s.flags["device"] == "" || s.flags["on"] == "" || (s.flags["app"] == "") == (s.flags["app-prefix"] == "") || s.flags["scope"] != "deploy" {
+	if err != nil || s.flags["device"] == "" || s.flags["on"] == "" || !s.validAuthorizationSelection() {
 		return model.Err("ARGUMENTS", authorizeUsage)
 	}
 	uses, err := optionalCount(s.flags["max-uses"], 20, "Invalid maximum use count")
@@ -24,8 +24,14 @@ func (s *session) authorize() error {
 	if err != nil {
 		return err
 	}
-	body := map[string]any{"device": s.flags["device"], "host": s.flags["on"], "scope": "deploy", "durationSeconds": int64(duration / time.Second), "maxUses": uses}
+	body := map[string]any{"device": s.flags["device"], "host": s.flags["on"], "scope": s.flags["scope"], "durationSeconds": int64(duration / time.Second), "maxUses": uses}
+	if s.flags["swarm"] != "" {
+		body["swarm"] = s.flags["swarm"]
+	}
 	// Exact-name windows and sandbox windows carry different app selectors.
+	if s.flags["actions"] != "" {
+		body["actions"] = strings.Split(s.flags["actions"], ",")
+	}
 	if err = s.addAuthorizeApps(body); err != nil {
 		return err
 	}
@@ -50,6 +56,9 @@ func (s *session) addAuthorizeApps(body map[string]any) error {
 			return model.Err("ARGUMENTS", "--max-apps, --route-domain and --keep-apps require --app-prefix")
 		}
 		body["apps"] = strings.Split(s.flags["app"], ",")
+		return nil
+	}
+	if s.flags["scope"] == "actions" {
 		return nil
 	}
 	apps, err := optionalCount(s.flags["max-apps"], 5, "Invalid maximum app count")
@@ -99,4 +108,12 @@ func (s *session) authorizations() error {
 		return s.print(result)
 	}
 	return model.Err("ARGUMENTS", "Usage: authorizations list | authorizations revoke ID")
+}
+
+// validAuthorizationSelection separates exact action grants from legacy deployment sandboxes.
+func (s *session) validAuthorizationSelection() bool {
+	if s.flags["scope"] == "actions" {
+		return s.flags["actions"] != "" && s.flags["app-prefix"] == "" && s.flags["max-apps"] == "" && s.flags["route-domain"] == "" && s.flags["keep-apps"] == ""
+	}
+	return s.flags["swarm"] == "" && s.flags["scope"] == "deploy" && s.flags["actions"] == "" && (s.flags["app"] == "") != (s.flags["app-prefix"] == "")
 }

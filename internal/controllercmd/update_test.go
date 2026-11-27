@@ -217,6 +217,11 @@ func TestUpdateKeepsInstalledConfiguration(t *testing.T) {
 	if err != nil || actual.ControllerHostname != installed.ControllerHostname || actual.Proxy != installed.Proxy || actual.Runtime != installed.Runtime || domain != "example.com" {
 		t.Fatalf("installed update target changed: %+v %q %v", actual, domain, err)
 	}
+	// Local and remote update invocations both pass the recorded runtime to the candidate installer.
+	args := updateInitArgs(actual, domain, state, configPath)
+	if !strings.Contains(strings.Join(args, " "), "--runtime docker --proxy nginx-existing") {
+		t.Fatalf("update did not retain Docker ownership and edge selection: %v", args)
+	}
 }
 
 // TestUpdateDoesNotForwardGitHubTokens keeps private release access out of init.

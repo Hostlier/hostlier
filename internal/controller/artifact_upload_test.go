@@ -3,6 +3,9 @@ package controller
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"hostlier/internal/client"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -37,8 +40,8 @@ func TestArtifactLargeChunkHTTP(t *testing.T) {
 	}
 }
 
-// TestDeviceUploadBodyLimit keeps the larger signed-body allowance exclusive to bounded chunk writes.
-func TestDeviceUploadBodyLimit(t *testing.T) {
+// TestDeviceBodyLimit reserves the larger signed-body allowance for exact payload routes.
+func TestDeviceBodyLimit(t *testing.T) {
 	chunkPath := "/v1/artifacts/" + strings.Repeat("a", 64) + "/chunks"
 	cases := []struct {
 		method, path string
@@ -46,7 +49,16 @@ func TestDeviceUploadBodyLimit(t *testing.T) {
 		accepted     bool
 	}{
 		{"POST", chunkPath, maxRequestBytes, true},
+		{"POST", "/v1/hosts/worker/proxy" + chunkPath[3:], maxRequestBytes, true},
+		{"POST", "/v1/hosts/worker/proxy" + chunkPath[3:], maxRequestBytes + 1, false},
+		{"POST", "/v1/hosts/worker/proxy" + chunkPath[3:] + "/extra", 131073, false},
 		{"POST", chunkPath, maxRequestBytes + 1, false},
+		{"POST", "/v1/plans", maxRequestBytes, true},
+		{"POST", "/v1/plans", maxRequestBytes + 1, false},
+		{"POST", "/v1/planning", maxRequestBytes, true},
+		{"POST", "/v1/hosts/worker/proxy/plans", maxRequestBytes, true},
+		{"GET", "/v1/plans", 131073, false},
+		{"POST", "/v1/plans/id/apply", 131073, false},
 		{"GET", chunkPath, 131073, false},
 		{"POST", "/v1/artifacts/status", 131073, false},
 		{"POST", "/v1/artifacts/commit", 131073, false},
@@ -57,15 +69,15 @@ func TestDeviceUploadBodyLimit(t *testing.T) {
 	for _, test := range cases {
 		r := httptest.NewRequest(test.method, test.path, strings.NewReader(strings.Repeat("x", test.size)))
 		_, err := deviceRequestBody(r)
-		// Unrelated routes and oversized chunks retain their hard bounds.
+		// Unrelated routes and oversized payloads retain their hard bounds.
 		if (err == nil) != test.accepted {
 			t.Fatalf("%s %s size=%d: %v", test.method, test.path, test.size, err)
 		}
 	}
 }
 
-// TestAPIUploadBodyLimit grants extra room only to local requests and exact chunk writes.
-func TestAPIUploadBodyLimit(t *testing.T) {
+// TestAPIBodyLimit applies the remote payload allowance to the corresponding HTTP and RPC routes.
+func TestAPIBodyLimit(t *testing.T) {
 	chunkPath := "/v1/artifacts/" + strings.Repeat("a", 64) + "/chunks"
 	for _, test := range []struct {
 		method, path string
@@ -73,6 +85,14 @@ func TestAPIUploadBodyLimit(t *testing.T) {
 		want         int64
 	}{
 		{"POST", chunkPath, false, maxRequestBytes},
+		{"POST", "/v1/hosts/worker/proxy" + chunkPath[3:], false, maxRequestBytes},
+		{"POST", "/v1/hosts/worker/proxy" + chunkPath[3:] + "/extra", false, 1 << 20},
+		{"POST", "/v1/plans", false, maxRequestBytes},
+		{"POST", "/v1/planning", false, maxRequestBytes},
+		{"POST", "/v1/hosts/worker/proxy/plans", false, maxRequestBytes},
+		{"POST", "/v1/hosts/worker/proxy/planning", false, maxRequestBytes},
+		{"POST", "/v1/hosts/worker/proxy/plans/id/apply", false, 1 << 20},
+		{"GET", "/v1/plans", false, 1 << 20},
 		{"POST", "/v1/artifacts/status", false, 1 << 20},
 		{"POST", "/v1/artifacts/commit", false, 1 << 20},
 		{"POST", "/v1/apps", false, 1 << 20},
@@ -134,5 +154,33 @@ func assertEmptyUploadStatus(t *testing.T, status artifact.UploadStatus) {
 	// Reused response values must clear every private progress field.
 	if status.Offset != 0 || status.Committed || status.PrefixDigest != "" {
 		t.Fatal("private staging leaked", status)
+	}
+}
+
+// TestGRPCFleetLargeArtifactChunk verifies the negotiated chunk through signed native gRPC and the outbound member session.
+func TestGRPCFleetLargeArtifactChunk(t *testing.T) {
+	f := newHumanFixture(t)
+	enrolledHostFixture(t, f, "worker")
+	public, private, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	login, _, _ := pairWithKey(t, f.c, deploymentScope{}, public, private)
+	api, _, _ := grpcFixture(t, f.c, client.EncodeDeviceCredential(login.Token, private))
+	path := "/v1/hosts/worker/proxy/artifacts/" + strings.Repeat("a", 64) + "/chunks"
+	var result struct {
+		Offset int64 `json:"offset"`
+	}
+	chunk := artifactChunkRequest{Data: bytes.Repeat([]byte("x"), artifact.ChunkBytes)}
+	if err := api.Request(context.Background(), "POST", path, chunk, &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Offset != artifact.ChunkBytes {
+		t.Fatal("incomplete forwarded chunk", result)
+	}
+	chunk.Offset = result.Offset
+	chunk.Data = append(chunk.Data, 'x')
+	if err := api.Request(context.Background(), "POST", path, chunk, &result); err == nil {
+		t.Fatal("oversized forwarded chunk accepted")
 	}
 }

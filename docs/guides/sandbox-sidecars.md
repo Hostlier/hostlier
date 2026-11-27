@@ -1,6 +1,6 @@
 # Browser and computer sidecar packages
 
-The `sandbox-browser` and `sandbox-computer` packages live in the separate `hostlier-packages` source repository. They are local `project-contribute` packages: adding either to an existing v2 app proposes a sidecar, a parent URL binding, and a shared stored-token reference. They do not take over the app's primary build. Use Hostlier v0.1.5 or later for the CLI and controller; older CLIs reject sidecar contributions. Both packages are published in the default Git package catalog for macOS/Linux on AMD64/ARM64. Use `hostlier package available` to obtain the full catalog commit, then install with `hostlier package install sandbox-browser --version COMMIT` and `hostlier package install sandbox-computer --version COMMIT`; runtime container images remain separate builds.
+The `sandbox-browser` and `sandbox-computer` packages live in the separate `hostlier-packages` source repository. They are local `project-contribute` packages: adding either to an existing v2 app proposes a sidecar, a parent URL binding, and a shared stored-token reference. They do not take over the app's primary build. Use Hostlier v0.1.5 or later for the CLI and controller; older CLIs reject sidecar contributions. Both packages are published in the default Git package catalog for macOS/Linux on AMD64/ARM64. Use `hostlier package available` to obtain the full catalog commit, then install with `hostlier package install sandbox-browser --version COMMIT` and `hostlier package install sandbox-computer --version COMMIT`. Updated catalog packages automatically use public GHCR runtime images pinned by digest for Linux AMD64 and ARM64; no runtime build or registry login is required.
 
 `sandbox-browser` runs Chromium through Playwright 1.65.0. The parent connects using Playwright's `chromium.connect` WebSocket API with a bearer header. This is the Playwright protocol, not a CDP endpoint. Client and service must use matching Playwright major/minor versions.
 
@@ -8,11 +8,11 @@ The `sandbox-browser` and `sandbox-computer` packages live in the separate `host
 
 ## Install and configure
 
-In the package repository, build the two Go executables and their matching runtime images using `packages/sandboxes/README.md`. Install the package binaries on the CLI machine:
+Install the packages on the CLI machine using the full catalog commit returned by `hostlier package available`:
 
 ```sh
-hostlier package install sandbox-browser --file /path/to/hostlier-packages/dist/hostlier-sandbox-browser
-hostlier package install sandbox-computer --file /path/to/hostlier-packages/dist/hostlier-sandbox-computer
+hostlier package install sandbox-browser --version COMMIT
+hostlier package install sandbox-computer --version COMMIT
 ```
 
 Create two stored secrets using `hostlier secret set browser-token` and `hostlier secret set computer-token`. Each value must contain 32–256 random URL-safe characters; a 32-byte random hex token is suitable. Keep values out of `.hostlier`.
@@ -24,19 +24,17 @@ hostlier package add sandbox-browser
 hostlier package add sandbox-computer
 ```
 
-Choose a built registry `image` or project-relative Docker image `archive` for each. For example, after saving the supplied images to the project:
+Set the stored secret names in `.hostlier`. These are the only required sandbox settings:
 
 ```yaml
 packages:
   sandbox-browser:
-    archive: images/browser.tar
     tokenSecret: browser-token
   sandbox-computer:
-    archive: images/computer.tar
     tokenSecret: computer-token
 ```
 
-Each archive must contain the corresponding runtime built from the package repository; an arbitrary Playwright base image does not include the service or health probe. Omit the unused `image`/`archive` field. Run `hostlier plan`, then `hostlier deploy --server production` for the normal reviewed deployment. Do not use `--file` for package composition; that flag selects an already prepared deployment manifest.
+Omit `image` and `archive`, or leave their scaffold fields blank, to use the official images. The receiving server selects its architecture automatically. To use a custom build, set either a registry `image` or a project-relative Docker image `archive`; both cannot be nonempty. Custom images must include the matching Hostlier service and health probe. Updating the installed catalog package updates its pinned default image; moving a registry tag cannot change it. Run `hostlier plan`, then `hostlier deploy --server production` for the normal reviewed deployment. Do not use `--file` for package composition; that flag selects an already prepared deployment manifest.
 
 The default member names are `browser` and `computer`; loopback ports are 9222 and 9333. Each receives 2 CPUs, 2 GiB RAM, a 512-process ceiling (shared across the Pod on k3s) and 1 GiB of temporary scratch space. Set `name`, `port`, `cpu`, `memory`, `urlEnv` or `tokenEnv` in the package settings to change those values. Declared port conflicts fail planning. Each sidecar is required for group readiness.
 

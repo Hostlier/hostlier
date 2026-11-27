@@ -17,7 +17,7 @@ func parse(args []string) (arguments, error) {
 	values := map[string]bool{}
 	values["mode"], values["memory-root"] = true, true
 	// Register value-taking options so they cannot be mistaken for booleans.
-	for _, v := range strings.Fields("backup-dir release-dir package compose dependencies architecture context service bridge-id connections engine-url client-id client-secret-ref family-id secret-name allow repository github version directory resource destination every retain to image before limit tail ssh ssh-config ssh-socket email auth auth-config data-config key public-key app app-prefix max-apps route-domain scope for device max-uses secrets create-secrets on url fingerprint controller-fingerprint target file route server socket name from-env domain runtime controller-hostname state-dir config port host hostname log-path operation revision storage output backup cursor input cpu memory replicas proxy component") {
+	for _, v := range strings.Fields("ca-file backup-dir release-dir package compose dependencies architecture context service bridge-id connections engine-url client-id client-secret-ref family-id secret-name allow repository github version directory resource destination every retain to image before limit tail ssh ssh-config ssh-socket email auth auth-config data-config key public-key app app-prefix max-apps route-domain swarm from actions scope for device max-uses secrets create-secrets on url fingerprint controller-fingerprint target file route server socket name from-env domain runtime controller-hostname state-dir config port host hostname log-path operation revision storage output backup cursor input cpu memory replicas proxy component") {
 		values[v] = true
 	}
 	// Consume each command token once while retaining positional order.

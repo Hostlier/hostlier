@@ -4,7 +4,7 @@ import "time"
 
 // allAccess treats only a completely empty permission selection as unrestricted.
 func (s deploymentScope) allAccess() bool {
-	return len(s.Apps) == 0 && len(s.Secrets) == 0 && len(s.CreateSecrets) == 0 && s.DurationSeconds == 0 && s.MaxUses == 0
+	return s.Swarm == "" && len(s.Actions) == 0 && len(s.Apps) == 0 && len(s.Secrets) == 0 && len(s.CreateSecrets) == 0 && s.DurationSeconds == 0 && s.MaxUses == 0
 }
 
 // accessMode persists unrestricted authority explicitly rather than inferring it from old grants.
@@ -12,6 +12,9 @@ func (s deploymentScope) accessMode() string {
 	// Any supplied restriction keeps the existing deployment validation rules.
 	if s.allAccess() {
 		return "all"
+	}
+	if len(s.Actions) != 0 {
+		return "actions"
 	}
 	return "deploy"
 }

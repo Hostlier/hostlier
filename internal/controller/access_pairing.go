@@ -12,7 +12,9 @@ import (
 
 // deploymentScope names every capability conferred by a paired CLI credential.
 type deploymentScope struct {
+	Swarm           string   `json:"swarm,omitempty"`
 	Apps            []string `json:"apps"`
+	Actions         []string `json:"actions,omitempty"`
 	Secrets         []string `json:"secrets"`
 	CreateSecrets   []string `json:"createSecrets,omitempty"`
 	DurationSeconds int64    `json:"durationSeconds"`
@@ -59,7 +61,7 @@ func (c *Controller) startCLIPairing(r *http.Request) (any, error) {
 	id, secret := random(), random()
 	p := &cliPairing{ID: id, Name: b.Name, PublicKey: b.PublicKey, SecretHash: verifier(secret), Challenge: random(), ExpiresAt: c.opts.Now().Add(10 * time.Minute)}
 	c.access.Pairings[id] = p
-	return map[string]any{"id": id, "requestSecret": secret, "pollSupported": true, "ownerSetupRequired": !c.humanEnrolled(), "message": "hostlier-cli-pair-v1|" + c.state.HumanRealm + "|" + id + "|" + p.Challenge, "url": "https://" + c.state.Hostname + "/connect?request=" + id, "expiresAt": p.ExpiresAt.UnixMilli()}, nil
+	return map[string]any{"id": id, "requestSecret": secret, "pollSupported": true, "ownerSetupRequired": !c.humanEnrolled(), "message": "hostlier-cli-pair-v1|" + c.state.HumanRealm + "|" + id + "|" + p.Challenge, "url": c.publicOrigin() + "/connect?request=" + id, "expiresAt": p.ExpiresAt.UnixMilli()}, nil
 }
 
 // pairReview reveals device identity and fingerprint without exposing a redemption code or secret.
@@ -88,15 +90,23 @@ func (c *Controller) validateDeploymentScope(s deploymentScope) error {
 	if s.allAccess() {
 		return nil
 	}
-	// Reject the request: Specify 1–20 apps, at most 20 secrets, 1–100 deployments and 1 minute–8 hours.
-	if !validAuthorizationLimits(authorizationRequest{Scope: "deploy", Apps: s.Apps, Secrets: s.Secrets, DurationSeconds: s.DurationSeconds, MaxUses: s.MaxUses}) {
-		return model.Err("INVALID_AUTHORIZATION", "Specify 1–20 apps, at most 20 secrets, 1–100 deployments and 1 minute–8 hours")
+	// Reject the request: Specify exact apps for deployment actions, valid action names, at most 20 secrets, 1–100 uses and 1 minute–8 hours.
+	if !validAuthorizationLimits(authorizationRequest{Scope: s.accessMode(), Swarm: s.Swarm, Actions: s.Actions, Host: "local", Apps: s.Apps, Secrets: s.Secrets, DurationSeconds: s.DurationSeconds, MaxUses: s.MaxUses}) {
+		return model.Err("INVALID_AUTHORIZATION", "Specify exact apps for deployment actions, valid action names, at most 20 secrets, 1–100 uses and 1 minute–8 hours")
 	}
 	// Check every retained entry before accepting the complete set.
 	for _, name := range append(append([]string{}, s.Apps...), s.Secrets...) {
 		// Reject the request: Scope requires exact application and secret names.
 		if !scopeName.MatchString(name) {
 			return model.Err("INVALID_AUTHORIZATION", "Scope requires exact application and secret names")
+		}
+	}
+	if s.Swarm != "" {
+		if s.accessMode() != "actions" || !model.ValidSwarmName(s.Swarm) {
+			return model.Err("INVALID_AUTHORIZATION", "Swarm selection requires action permissions")
+		}
+		if _, err := c.swarm(s.Swarm); err != nil {
+			return err
 		}
 	}
 	// Creation is a separate, explicit capability limited to referenced secret names.
@@ -204,7 +214,12 @@ func (c *Controller) completeCLIPairing(p *cliPairing) (any, error) {
 	}
 	id, token, grantID := random(), random(), random()
 	c.state.Clients[id] = &Client{ID: id, Name: p.Name, Verifier: verifier(token), PublicKey: p.PublicKey, DeploymentGrant: grantID}
-	g := &Authorization{ID: grantID, Device: id, Host: "local", Apps: p.Scope.Apps, Secrets: p.Scope.Secrets, CreateSecrets: p.Scope.CreateSecrets, Scope: p.Scope.accessMode(), ExpiresAt: c.authorizationExpiry(p.Scope.accessMode(), p.Scope.DurationSeconds), MaxUses: p.Scope.MaxUses, KeyFingerprint: p.Issuer}
+	swarmID, err := c.authorizationSwarm("local", p.Scope.Swarm, id)
+	if err != nil {
+		delete(c.state.Clients, id)
+		return nil, err
+	}
+	g := &Authorization{SwarmID: swarmID, ID: grantID, Device: id, Host: "local", Apps: p.Scope.Apps, Actions: p.Scope.Actions, Secrets: p.Scope.Secrets, CreateSecrets: p.Scope.CreateSecrets, Scope: p.Scope.accessMode(), ExpiresAt: c.authorizationExpiry(p.Scope.accessMode(), p.Scope.DurationSeconds), MaxUses: p.Scope.MaxUses, KeyFingerprint: p.Issuer}
 	c.state.Authorizations[grantID] = g
 	delete(c.access.Pairings, p.ID)
 	c.state.Generation++

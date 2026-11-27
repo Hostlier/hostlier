@@ -87,6 +87,13 @@ func (s *session) getPrint(path string) error {
 
 // list prints the controller application inventory.
 func (s *session) list() error {
+	if s.flags["swarm"] != "" {
+		path := "/v1/swarms/" + url.PathEscape(s.flags["swarm"]) + "/apps"
+		if s.flags["all"] != "" {
+			path += "?includeDeleted=true"
+		}
+		return s.getPrint(path)
+	}
 	if s.flags["all"] != "" {
 		return s.getPrint("/v1/apps?includeDeleted=true")
 	}

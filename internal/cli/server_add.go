@@ -1,10 +1,12 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"hostlier/internal/client"
 	"hostlier/internal/config"
@@ -44,7 +46,7 @@ func (s *session) serverInstallTarget() (serverInstall, error) {
 		host = host[1 : len(host)-1]
 	}
 	if !sshDestination.MatchString(host) && net.ParseIP(host) == nil || strings.ContainsAny(host, "@[]") {
-		return target, model.Err("ARGUMENTS", "--host requires a hostname or IP address reachable from the master")
+		return target, model.Err("ARGUMENTS", "--host requires the box hostname or IP address")
 	}
 	target.endpoint = "https://" + net.JoinHostPort(host, fleet.Port)
 	name, _, _ := strings.Cut(strings.ToLower(host), ".")
@@ -112,7 +114,7 @@ func (s *session) addServer() error {
 	return s.verifyAddedServer(record)
 }
 
-// verifyAddedServer checks the real master-to-box path, including both certificate pins.
+// verifyAddedServer checks the controller-initiated session, including both certificate pins.
 func (s *session) verifyAddedServer(record fleet.HostRecord) error {
 	if err := s.checkServer(record); err != nil {
 		return err
@@ -135,8 +137,23 @@ func (s *session) checkServer(record fleet.HostRecord) error {
 	var state struct {
 		Generation *int64 `json:"generation"`
 	}
-	if err := s.request("GET", "/v1/hosts/"+record.Name+"/proxy/host-state", nil, &state); err != nil {
-		return fmt.Errorf("%s is enrolled, but the master could not verify %s. Check reachability and the fleet pin: %w", record.Name, record.URL, err)
+	deadline := time.Now().Add(45 * time.Second)
+	for {
+		err := s.request("GET", "/v1/hosts/"+record.Name+"/proxy/host-state", nil, &state)
+		if err == nil {
+			break
+		}
+		var failure *model.Error
+		if !errors.As(err, &failure) || failure.Code != "HOST_UNAVAILABLE" || time.Now().After(deadline) {
+			return fmt.Errorf("%s is enrolled, but has no verified session. Check its outbound master connection and fleet pins: %w", record.Name, err)
+		}
+		timer := time.NewTimer(time.Second)
+		select {
+		case <-s.ctx.Done():
+			timer.Stop()
+			return s.ctx.Err()
+		case <-timer.C:
+		}
 	}
 	if state.Generation == nil {
 		return model.Err("HOST_PROTOCOL", "Enrolled host returned an invalid fleet state")
@@ -173,4 +190,22 @@ func (s *session) enrollServer(hosts map[string]fleet.HostRecord, record fleet.H
 		return nil
 	}
 	return s.request("POST", "/v1/hosts", record, nil)
+}
+
+// masterEndpoint uses the public master identity even when enrollment uses a local socket.
+func (s *session) masterEndpoint() (string, error) {
+	var identity struct {
+		URL string `json:"url"`
+	}
+	if err := s.request("GET", "/v1/hosts/identity", nil, &identity); err != nil {
+		return "", err
+	}
+	endpoint := identity.URL
+	if endpoint == "" {
+		endpoint = fleet.MasterEndpoint(s.serverTarget)
+	}
+	if !fleet.ValidURL(endpoint) {
+		return "", model.Err("INVALID_HOST", "Master must advertise its fleet HTTPS endpoint")
+	}
+	return endpoint, nil
 }

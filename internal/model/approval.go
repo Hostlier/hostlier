@@ -15,6 +15,7 @@ func RequiresHumanApproval(method, path string) bool {
 	}
 	// These exact POST routes prepare work or implement separately verified ceremonies.
 	preparation := map[string]bool{
+		"/v1/fleet-joins/request": true, "/v1/fleet-joins/poll": true,
 		"/v1/access/pair/start": true, "/v1/access/pair/redeem": true, "/v1/access/pair/poll": true,
 		"/v1/access/passkey/register/begin": true, "/v1/access/passkey/register/finish": true,
 		"/v1/access/passkey/decision/begin": true, "/v1/access/passkey/decision/finish": true,
