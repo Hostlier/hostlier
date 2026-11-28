@@ -138,7 +138,16 @@ func ValidateProject(p model.Project) (model.Project, error) {
 	if err := ValidateSwarm(p); err != nil {
 		return p, err
 	}
+	if p.Kind == model.CronKind {
+		return validateCronProject(p)
+	}
+	if p.Schedule != "" || p.TimeZone != "" {
+		return p, invalid("Schedule and timeZone require kind: cron")
+	}
 	if p.Kind == "memory" {
+		if len(p.Cron) != 0 {
+			return p, invalid("cron requires an application service")
+		}
 		return validateMemoryProject(p)
 	}
 	if p.Kind != "" || len(p.Exports) != 0 {
@@ -158,7 +167,11 @@ func ValidateProject(p model.Project) (model.Project, error) {
 			return p, err
 		}
 	}
-	return validateProjectWorkflow(p)
+	p, err = validateProjectWorkflow(p)
+	if err != nil {
+		return p, err
+	}
+	return validateServiceCron(p)
 }
 
 // Fingerprint hashes canonical JSON for immutable approval comparisons.

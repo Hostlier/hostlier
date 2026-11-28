@@ -229,6 +229,9 @@ func (c *Controller) applyAuthorization(a *HumanApproval, request humanRequest) 
 
 // grantAllowsPlan checks host pinning, secret exposure and sandbox routes for one plan.
 func grantAllowsPlan(grant *Authorization, plan Plan, request humanRequest) bool {
+	if plan.Spec.Kind == model.CronKind || len(plan.Spec.Cron) > 0 {
+		return false
+	}
 	if !grantSwarmMatches(grant, plan.SwarmID) {
 		return false
 	}

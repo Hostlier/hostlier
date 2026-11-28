@@ -14,6 +14,10 @@ func topLevelHelp() string {
 
 // showCommandHelp resolves command groups and leaf help without contacting a controller.
 func (s *session) showCommandHelp() bool {
+	if s.command == "cron" || s.command == "help" && s.sub == "cron" {
+		s.message(cronHelp)
+		return true
+	}
 	if s.command == "swarm" || s.command == "help" && s.sub == "swarm" {
 		s.message(swarmHelp)
 		return true

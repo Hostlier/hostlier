@@ -278,6 +278,9 @@ func (c *Controller) reviewHostIntent(request humanRequest, actor string, review
 			return nil, model.Err("HOST_PROTOCOL", "Invalid host application membership")
 		}
 		review["swarmId"] = model.SwarmName(app.SwarmID)
+		if job, ok := cronActionPath(parts); ok {
+			return cronActionReview(&app, job, request, review)
+		}
 	}
 	if len(parts) >= 3 && parts[1] == "swarms" {
 		group, err := c.remoteSwarm(id, parts[2], actor)

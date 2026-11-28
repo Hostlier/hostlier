@@ -81,12 +81,7 @@ func validateEndpoint(p model.Project) error {
 
 // validateProcess bounds executable arguments and checks explicit private probes.
 func validateProcess(p model.Project) error {
-	// Bound termination waits for both runtime APIs.
-	if p.Shutdown != nil && (p.Shutdown.GraceSeconds < 1 || p.Shutdown.GraceSeconds > 600) {
-		return invalid("Shutdown graceSeconds must be 1 to 600")
-	}
-	// Exec vectors are bounded separately from process policy.
-	if err := validateCommands(p); err != nil {
+	if err := validateProcessCommand(p); err != nil {
 		return err
 	}
 	// Private listeners must be checked from inside their namespace.
@@ -94,6 +89,13 @@ func validateProcess(p model.Project) error {
 		return invalid("Private services, workers and primary protocols other than http require health.exec")
 	}
 	return validateProbe(p.Health)
+}
+
+func validateProcessCommand(p model.Project) error {
+	if p.Shutdown != nil && (p.Shutdown.GraceSeconds < 1 || p.Shutdown.GraceSeconds > 600) {
+		return invalid("Shutdown graceSeconds must be 1 to 600")
+	}
+	return validateCommands(p)
 }
 
 // probeCommand safely extracts an optional exec probe.
@@ -232,7 +234,7 @@ func validateCommands(p model.Project) error {
 
 // invalidMember excludes nested ownership and scheduling from sidecar declarations.
 func invalidMember(name string, m model.Project) bool {
-	return !nameRE.MatchString(name) || name == "app" || len(m.Sidecars) > 0 || m.Replicas != nil || m.Workflow != nil || len(m.Dependencies) > 0
+	return !nameRE.MatchString(name) || name == "app" || m.Kind == model.CronKind || len(m.Cron) > 0 || len(m.Sidecars) > 0 || m.Replicas != nil || m.Workflow != nil || len(m.Dependencies) > 0
 }
 
 // legacyProcessFields groups v2-only process data so legacy validation stays explicit.

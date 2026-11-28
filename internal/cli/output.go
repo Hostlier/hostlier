@@ -21,7 +21,7 @@ const (
 )
 
 // operationSummaryFields are the operation fields a person needs; --json keeps the full record.
-var operationSummaryFields = []string{"id", "kind", "name", "status", "action", "error", "supersededBy", "restoreBackupId", "planId"}
+var operationSummaryFields = []string{"id", "kind", "name", "status", "action", "cronJob", "runId", "error", "supersededBy", "restoreBackupId", "planId"}
 
 // outputFormat honours --json/--toon, otherwise prints text for terminals and keeps JSON for pipes and scripts.
 func outputFormat(flags map[string]string, out io.Writer) string {

@@ -172,6 +172,9 @@ func (c *Controller) humanReview(request humanRequest, actor string) (json.RawMe
 	}
 	if len(parts) >= 3 && parts[1] == "apps" {
 		review["swarmId"] = c.appSwarmID(parts[2])
+		if job, ok := cronActionPath(parts); ok {
+			return cronActionReview(c.state.Applications[parts[2]], job, request, review)
+		}
 	}
 	if len(parts) >= 3 && parts[1] == "swarms" {
 		group, err := c.swarm(parts[2])

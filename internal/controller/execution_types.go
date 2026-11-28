@@ -4,18 +4,21 @@ import "hostlier/internal/model"
 
 // operationInput is the immutable execution snapshot captured under the state lock.
 type operationInput struct {
-	operation *Operation
-	previous  *model.Deployment
-	secrets   map[string]string
-	err       error
+	operation    *Operation
+	previous     *model.Deployment
+	serviceCrons bool
+	secrets      map[string]string
+	err          error
 }
 
 // operationResult carries engine output back to the durable-state update phase.
 type operationResult struct {
-	deployed     bool
-	deployment   model.Deployment
-	resourceRefs map[string]string
-	err          error
+	deployed             bool
+	cronReconcilePending bool
+	deployment           model.Deployment
+	runID                string
+	resourceRefs         map[string]string
+	err                  error
 }
 
 // workflowExecution separates application environment values from runtime network attachments.

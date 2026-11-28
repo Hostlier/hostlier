@@ -7,6 +7,14 @@ import (
 
 // validateDeploymentRuntime rejects unsupported replica settings before any package planning.
 func (c *Controller) validateDeploymentRuntime(spec model.Project) error {
+	if spec.Kind == model.CronKind {
+		if _, ok := c.opts.Runtime.(model.CronRuntime); !ok || c.opts.Runtime.Name() != "k3s" {
+			return model.Err("CONTROLLER_MODE", "Standalone cron jobs require K3s")
+		}
+	}
+	if len(spec.Cron) != 0 && !c.supportsServiceCrons() {
+		return model.Err("CONTROLLER_MODE", "Service cron jobs require K3s")
+	}
 	if (spec.Kind == "memory") != (c.opts.Runtime.Name() == "memory") {
 		return model.Err("CONTROLLER_MODE", "Memory projects require a memory controller; memory controllers cannot deploy applications")
 	}

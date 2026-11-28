@@ -62,7 +62,7 @@ func New(o Options) (*Controller, error) {
 		return nil, err
 	}
 	// Reject this path: State version or runtime incompatible.
-	if (c.state.Version != 2 && c.state.Version != 3) || c.state.Runtime != o.Runtime.Name() {
+	if (c.state.Version < 2 || c.state.Version > 5) || c.state.Runtime != o.Runtime.Name() {
 		c.store.Close()
 		return nil, model.Err("INCOMPATIBLE_STATE", "State version or runtime incompatible")
 	}

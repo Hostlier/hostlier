@@ -89,6 +89,9 @@ func (s *session) remoteCommand() error {
 
 // dispatch selects an authenticated command handler without mixing command behavior.
 func (s *session) dispatch() error {
+	if s.command == "cron" {
+		return s.cronCommand()
+	}
 	// Apply this check before granting authority or advancing protocol state.
 	if s.command == "authorize" {
 		return s.authorize()

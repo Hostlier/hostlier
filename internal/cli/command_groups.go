@@ -14,6 +14,7 @@ type helpEntry struct {
 
 // rootCommands expose domains; individual application and administration actions live below them.
 var rootCommands = []helpEntry{
+	{"cron", "Manage scheduled K3s jobs and their runs"},
 	{"swarm", "Group K3s applications and manage membership"},
 	{"memory", "Deploy and mount confined host storage"},
 	{"init", "Create an app deployment configuration"},
@@ -85,6 +86,10 @@ var commandGroups = map[string][]helpEntry{
 
 // routeArguments normalizes grouped commands before approval, positional checks and dispatch.
 func routeArguments(parsed arguments) (arguments, error) {
+	if len(parsed.args) == 1 && parsed.args[0] == "cron" {
+		parsed.flags["help"] = "true"
+		return parsed, nil
+	}
 	if len(parsed.args) > 0 && parsed.args[0] == "memory" {
 		if parsed.flags["on"] != "" && parsed.flags["on"] != "local" {
 			return parsed, model.Err("ARGUMENTS", "Connect directly to the memory controller")

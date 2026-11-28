@@ -82,7 +82,7 @@ func (c *Controller) createSwarm(r *http.Request) (any, error) {
 	group := model.Swarm{ID: "sw_" + random()[:32], Name: input.Name}
 	version := c.state.Version
 	c.state.Swarms[group.ID] = group
-	c.state.Version = 3
+	c.state.Version = max(c.state.Version, 3)
 	c.state.Generation++
 	if err := c.store.Save(c.state); err != nil {
 		delete(c.state.Swarms, group.ID)

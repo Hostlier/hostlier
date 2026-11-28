@@ -13,7 +13,7 @@ func (c *Controller) initializeSwarms() error {
 	if _, ok := c.state.Swarms[model.DefaultSwarm]; !ok {
 		c.state.Swarms[model.DefaultSwarm] = model.Swarm{ID: model.DefaultSwarm, Name: model.DefaultSwarm}
 	}
-	if len(c.state.Swarms) > 1 && c.state.Version != 3 {
+	if len(c.state.Swarms) > 1 && c.state.Version < 3 {
 		return model.Err("INCOMPATIBLE_STATE", "Named swarms require controller state version 3")
 	}
 	seen := map[string]bool{}

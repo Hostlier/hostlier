@@ -30,6 +30,9 @@ func (c *Controller) apiApps(r *http.Request, p []string, actor string) (any, er
 	if app == nil {
 		return nil, model.Err("NOT_FOUND", "Application not found")
 	}
+	if len(p) >= 4 && p[3] == "cron" {
+		return c.apiCron(r, p, app, actor)
+	}
 	// Return safe status for the exact application route.
 	if matches(r, p, "GET", 3, "") {
 		return c.applicationStatus(r, app)
@@ -117,6 +120,9 @@ func (c *Controller) applicationAction(r *http.Request, app *Application, actor 
 
 // queueAppAction applies the shared lifecycle checks; the actor lets scoped devices follow their operation.
 func (c *Controller) queueAppAction(app *Application, action string, purge bool, actor string) (any, error) {
+	if app.Spec.Kind == model.CronKind {
+		return nil, model.Err("INVALID_ACTION", "Use hostlier cron for scheduled workload actions")
+	}
 	// Reject this path: Invalid application action.
 	if !validAction(actionRequest{Action: action, Purge: purge}) {
 		return nil, model.Err("INVALID_ACTION", "Invalid application action")

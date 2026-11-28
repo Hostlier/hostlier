@@ -58,7 +58,7 @@ func (c *Controller) beginOperation(op *Operation) bool {
 // operationInput snapshots prior deployment and decrypts exactly the approved secret revisions.
 // The caller holds the state lock; accepted operation specifications are immutable.
 func (c *Controller) operationInput(op *Operation) operationInput {
-	input := operationInput{operation: op}
+	input := operationInput{operation: op, serviceCrons: len(op.Spec.Cron) != 0 || c.hasServiceCrons(op.Name)}
 	input.secrets, input.err = c.operationSecrets(op.SecretRefs)
 	// Snapshot the existing deployment for runtime replacement and lifecycle work.
 	if app := c.state.Applications[op.Name]; app != nil {
@@ -103,6 +103,8 @@ func (c *Controller) executeOperation(input operationInput) operationResult {
 	// Run dependency binding and application replacement together.
 	case "deploy":
 		return c.executeDeployment(input, onEvent)
+	case "cron-action":
+		result.runID, result.err = c.executeCronAction(op)
 	// Provision the approved private resource and optional restore.
 	case "resource-resize":
 		result.err = c.executeResourceResize(op, onEvent)
@@ -114,6 +116,12 @@ func (c *Controller) executeOperation(input operationInput) operationResult {
 		result.err = c.executeResourceAction(op, onEvent)
 	// Run an ordinary application lifecycle action for remaining operation kinds.
 	default:
+		if op.Kind == "action" && op.Action == "delete" && input.serviceCrons {
+			result.err = c.reconcileServiceCrons(model.Project{Name: op.Name}, model.DeployContext{})
+			if result.err != nil {
+				return result
+			}
+		}
 		result.err = c.opts.Runtime.Action(c.ctx, op.Name, op.Action, model.ActionContext{Purge: op.Purge, Application: input.previous, OnEvent: onEvent})
 	}
 	return result
@@ -147,6 +155,9 @@ func (c *Controller) executeDeployment(input operationInput, onEvent func(model.
 	if op.Spec.Kind == "memory" {
 		return c.executeMemoryDeployment(op)
 	}
+	if op.Spec.Kind == model.CronKind {
+		return c.executeCronDeployment(input)
+	}
 	workflowBindings, workflowErr := c.executeWorkflow(op)
 	// Package provisioning and output publication must complete before deploying the app.
 	if workflowErr != nil {
@@ -166,10 +177,18 @@ func (c *Controller) executeDeployment(input operationInput, onEvent func(model.
 	for key, value := range bindings {
 		input.secrets[key] = value
 	}
-	result.deployment, result.err = c.opts.Runtime.Deploy(c.ctx, op.Spec, model.DeployContext{OperationID: op.ID, Secrets: input.secrets, DependencyNetworks: append(networks, workflowBindings.networks...), Previous: input.previous, OnEvent: onEvent})
+	deployContext := model.DeployContext{OperationID: op.ID, Secrets: input.secrets, DependencyNetworks: append(networks, workflowBindings.networks...), Previous: input.previous, OnEvent: onEvent}
+	result.deployment, result.err = c.opts.Runtime.Deploy(c.ctx, op.Spec, deployContext)
 	// Only healthy application replacement authorizes the reviewed after-success hooks.
 	if result.err == nil {
 		result.deployed = true
+		if input.serviceCrons {
+			result.err = c.reconcileServiceCrons(op.Spec, deployContext)
+			result.cronReconcilePending = result.err != nil
+			if result.err != nil {
+				return result
+			}
+		}
 		_, result.err = c.executeWorkflowPhase(op, true)
 	}
 	return result
@@ -260,6 +279,8 @@ func (c *Controller) recordSuccessfulOperation(op *Operation, result operationRe
 	// Activate the new deployment and preserve rollback history.
 	case "deploy":
 		c.recordDeployment(op, result)
+	case "cron-action":
+		c.recordCronAction(op, result.runID)
 	// Update resource lifecycle state and approved purge effects.
 	case "resource-action":
 		c.recordResourceAction(op)
@@ -276,10 +297,12 @@ func (c *Controller) recordDeployment(op *Operation, result operationResult) {
 	deployment := result.deployment
 	deployment.Name = op.Spec.Name
 	deployment.URL = op.Spec.Route
-	deployment.Status = "running"
-	// Scaling to zero persists the stopped state across controller restarts.
-	if model.DesiredReplicas(op.Spec) == 0 {
-		deployment.Status = "stopped"
+	if op.Spec.Kind != model.CronKind {
+		deployment.Status = "running"
+		// Scaling to zero persists the stopped state across controller restarts.
+		if model.DesiredReplicas(op.Spec) == 0 {
+			deployment.Status = "stopped"
+		}
 	}
 	revisions := []Revision{}
 	// Preserve previous revisions so rollback remains available after replacement.
@@ -288,7 +311,7 @@ func (c *Controller) recordDeployment(op *Operation, result operationResult) {
 	}
 	revision := Revision{ResourceRefs: result.resourceRefs, ID: op.ID, Spec: op.Spec, SecretRefs: op.SecretRefs}
 	revisions = append(revisions, revision)
-	c.state.Applications[op.Name] = &Application{ProductPolicy: c.nextProductPolicy(op.Spec), ResourceRefs: result.resourceRefs, Deployment: deployment, Spec: op.Spec, SecretRefs: op.SecretRefs, Revision: op.ID, Revisions: revisions}
+	c.state.Applications[op.Name] = &Application{CronReconcilePending: result.cronReconcilePending, ProductPolicy: c.nextProductPolicy(op.Spec), ResourceRefs: result.resourceRefs, Deployment: deployment, Spec: op.Spec, SecretRefs: op.SecretRefs, Revision: op.ID, Revisions: revisions}
 	c.state.Applications[op.Name].MemorySources = op.MemorySources
 	c.recordSwarmDeployment(op)
 }
@@ -340,7 +363,7 @@ func (c *Controller) recordApplicationAction(op *Operation) {
 // supersedeInterrupted releases obsolete route reservations after successful recovery or deletion.
 func (c *Controller) supersedeInterrupted(op *Operation) {
 	// Only a replacement deployment or deletion can release interrupted reservations.
-	if op.Kind != "deploy" && !(op.Kind == "action" && op.Action == "delete") {
+	if op.Kind != "deploy" && !((op.Kind == "action" || op.Kind == "cron-action" && op.CronJob == "") && op.Action == "delete") {
 		return
 	}
 	// Inspect accepted operations as well as active state before allowing conflicting work.

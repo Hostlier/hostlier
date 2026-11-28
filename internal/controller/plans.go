@@ -27,6 +27,9 @@ func (c *Controller) makePlan(r *http.Request, actor string) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := c.checkCronDeploymentKind(spec); err != nil {
+		return nil, err
+	}
 	swarmID, err := c.planSwarm(&spec, intent)
 	if err != nil {
 		return nil, err
@@ -79,6 +82,11 @@ func (c *Controller) makePlan(r *http.Request, actor string) (any, error) {
 	}
 	plan.RequiredActions = deploymentActions(intent.Action, spec, c.state.Applications[spec.Name])
 	plan.StatefulSource = c.statefulSource(spec.Name)
+	if spec.Kind == model.CronKind {
+		plan.Changes = cronPlanChanges(spec, refs, warnings)
+	} else if changes := c.serviceCronChanges(spec); changes != nil {
+		plan.Changes.(map[string]any)["cron"] = changes
+	}
 	plan.Fingerprint = config.Fingerprint(plan)
 	c.state.Plans[plan.ID] = plan
 	copy := *plan
@@ -121,6 +129,12 @@ func (c *Controller) applyPlan(r *http.Request, id, actor string) (any, error) {
 		return nil, model.Err("STALE_PLAN", "Plan expired or server changed; review new plan")
 	}
 	if !resourcePlanKind(plan.Kind) {
+		if err := c.checkCronDeploymentKind(plan.Spec); err != nil {
+			return nil, err
+		}
+		if (plan.Spec.Kind == model.CronKind || len(plan.Spec.Cron) != 0 || c.hasServiceCrons(plan.Spec.Name)) && c.busy(plan.Spec.Name) {
+			return nil, model.Err("APP_BUSY", "Cron schedule has an active operation")
+		}
 		if err := c.validatePlanSwarm(plan); err != nil {
 			return nil, err
 		}
@@ -142,7 +156,11 @@ func (c *Controller) applyPlan(r *http.Request, id, actor string) (any, error) {
 	op.MemorySources = plan.MemorySources
 	plan.OperationID = op.ID
 	plan.RequestID = b.RequestID
-	return c.acceptOperation(op)
+	receipt, err := c.acceptOperation(op)
+	if err != nil {
+		plan.OperationID, plan.RequestID = "", ""
+	}
+	return receipt, err
 }
 
 // deploymentPlanRequest bounds the recognized JSON fields for this API action.
@@ -179,7 +197,11 @@ func (c *Controller) planSpecification(r *http.Request) (model.Project, map[stri
 	var exact map[string]SecretRef
 	// Resolve immutable rollback inputs when rollback was explicitly requested.
 	if b.Action == "rollback" {
-		return c.rollbackSpecification(spec, b.Revision)
+		spec, exact, err := c.rollbackSpecification(spec, b.Revision)
+		if err == nil && len(spec.Cron) != 0 {
+			err = c.validateDeploymentRuntime(spec)
+		}
+		return spec, exact, err
 	}
 
 	return spec, exact, nil
@@ -305,5 +327,5 @@ func syncEndpointRoute(spec *model.Project) {
 // statefulSource prevents removing existing volumes or dependencies through a stateless delegation.
 func (c *Controller) statefulSource(name string) bool {
 	app := c.state.Applications[name]
-	return app != nil && (model.HasVolumes(app.Spec) || len(app.ResourceRefs) > 0 || app.Spec.Workflow != nil)
+	return c.hasServiceCrons(name) || app != nil && (model.HasVolumes(app.Spec) || len(app.ResourceRefs) > 0 || app.Spec.Workflow != nil)
 }

@@ -10,7 +10,7 @@ import (
 
 // swarmAppReadRoute checks named-app reads against current membership on the selected controller.
 func (c *Controller) swarmAppReadRoute(r *http.Request, p []string, g *Authorization, remote bool) bool {
-	if r.Method != "GET" || !(len(p) == 3 || len(p) == 4 && (p[3] == "logs" || p[3] == "usage")) {
+	if r.Method != "GET" || !(len(p) == 3 || len(p) == 4 && (p[3] == "logs" || p[3] == "usage") || cronReadPath(p)) {
 		return false
 	}
 	if !grantCoversApp(g, p[2]) && !(g.Scope == "actions" && (g.SwarmID != "" || containsName(g.Actions, model.SwarmsView) || containsName(g.Actions, model.SwarmsManage)) && len(g.Apps) == 0) {

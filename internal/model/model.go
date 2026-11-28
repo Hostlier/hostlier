@@ -43,9 +43,12 @@ type Dependency struct {
 
 // Project is the shared .hostlier deployment contract used by CLI, controller and runtimes.
 type Project struct {
-	Swarm   string                  `json:"swarm,omitempty" yaml:"swarm,omitempty"`
-	Kind    string                  `json:"kind,omitempty" yaml:"kind,omitempty"`
-	Exports map[string]MemoryExport `json:"exports,omitempty" yaml:"exports,omitempty"`
+	Swarm    string                  `json:"swarm,omitempty" yaml:"swarm,omitempty"`
+	Kind     string                  `json:"kind,omitempty" yaml:"kind,omitempty"`
+	Schedule string                  `json:"schedule,omitempty" yaml:"schedule,omitempty"`
+	TimeZone string                  `json:"timeZone,omitempty" yaml:"timeZone,omitempty"`
+	Cron     map[string]CronSchedule `json:"cron,omitempty" yaml:"cron,omitempty"`
+	Exports  map[string]MemoryExport `json:"exports,omitempty" yaml:"exports,omitempty"`
 	// Packages holds per-package authoring settings; the CLI resolves each section against that package’s contract.
 	Packages map[string]map[string]any `yaml:"packages,omitempty" json:"-"`
 	// Package selects local CLI hooks and is never sent to the controller.

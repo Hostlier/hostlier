@@ -254,7 +254,9 @@ func (c *Controller) routeAPIAction(r *http.Request, p []string, actor string) (
 	if err := c.checkMaintenanceMutation(r); err != nil {
 		return nil, err
 	}
-	if p[1] == "swarms" { return c.apiSwarms(r,p,actor) }
+	if p[1] == "swarms" {
+		return c.apiSwarms(r, p, actor)
+	}
 	// Controller maintenance retains the same authenticated and approved dispatcher.
 	if p[1] == "controller" {
 		return c.apiControllerMaintenance(r, p, actor)
@@ -327,10 +329,20 @@ func validAction(b actionRequest) bool {
 
 // acceptOperation persists accepted work before handing it to the background executor.
 func (c *Controller) acceptOperation(op *Operation) (any, error) {
+	priorVersion := c.state.Version
+	if op.Kind == "deploy" && op.Spec.Kind == model.CronKind {
+		c.state.Version = max(c.state.Version, 4)
+	}
+	if op.Kind == "deploy" && len(op.Spec.Cron) != 0 {
+		c.state.Version = max(c.state.Version, 5)
+	}
 	c.state.Operations[op.ID] = op
 	c.state.Generation++
 	// Require durable state persistence before reporting success or scheduling side effects.
 	if err := c.store.Save(c.state); err != nil {
+		delete(c.state.Operations, op.ID)
+		c.state.Generation--
+		c.state.Version = priorVersion
 		return nil, err
 	}
 	c.enqueue(op.ID)

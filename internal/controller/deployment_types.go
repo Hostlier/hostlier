@@ -15,10 +15,11 @@ type Revision struct {
 
 // Application combines active deployment state with retained rollback history.
 type Application struct {
-	SwarmID       string                          `json:"swarmId,omitempty"`
-	MemorySources map[string]model.MemoryIdentity `json:"memorySources,omitempty"`
-	ProductPolicy *workflow.ProductPolicy         `json:"productPolicy,omitempty"`
-	ResourceRefs  map[string]string               `json:"resourceRefs,omitempty"`
+	CronReconcilePending bool                            `json:"cronReconcilePending,omitempty"`
+	SwarmID              string                          `json:"swarmId,omitempty"`
+	MemorySources        map[string]model.MemoryIdentity `json:"memorySources,omitempty"`
+	ProductPolicy        *workflow.ProductPolicy         `json:"productPolicy,omitempty"`
+	ResourceRefs         map[string]string               `json:"resourceRefs,omitempty"`
 	model.Deployment
 	Spec       model.Project        `json:"spec"`
 	SecretRefs map[string]SecretRef `json:"secretRefs"`
@@ -65,6 +66,9 @@ type Operation struct {
 	Spec            model.Project                   `json:"spec,omitempty"`
 	SecretRefs      map[string]SecretRef            `json:"secretRefs,omitempty"`
 	Action          string                          `json:"action,omitempty"`
+	RunID           string                          `json:"runId,omitempty"`
+	CronRevision    string                          `json:"cronRevision,omitempty"`
+	CronJob         string                          `json:"cronJob,omitempty"`
 	Purge           bool                            `json:"purge,omitempty"`
 	PlanID          string                          `json:"planId,omitempty"`
 	Fingerprint     string                          `json:"fingerprint,omitempty"`

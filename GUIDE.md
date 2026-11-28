@@ -20,6 +20,7 @@ In the terminal, use `hostlier --help` for the command index, `hostlier app --he
 - [Scale and monitor apps](docs/guides/scale-and-monitor.md).
 - [Add databases and bind credentials](docs/guides/databases.md).
 - [Compose products and workflows](docs/guides/products-and-workflows.md).
+- [Schedule standalone cron jobs](docs/guides/cron.md).
 - [Install coding-agent skills](docs/guides/coding-agents.md).
 - [Deploy agents and sidecars](docs/agent-deployments.md).
 

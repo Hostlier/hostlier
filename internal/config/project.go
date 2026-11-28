@@ -23,7 +23,7 @@ func validateProjectIdentity(p model.Project) (model.Project, error) {
 		return p, invalid("Invalid image reference")
 	}
 	// Require a usable TCP application port.
-	if (p.Port < 1 || p.Port > 65535) && p.Workload != "worker" {
+	if (p.Port < 1 || p.Port > 65535) && p.Workload != "worker" && p.Kind != model.CronKind {
 		return p, invalid("Application port must be between 1 and 65535")
 	}
 	return p, nil
