@@ -13,6 +13,8 @@ sudo ./hostlier-controller init --domain apps.example.com
 
 New installations use Hostlier-managed K3s with its bundled containerd. Existing Docker installations or services on the host stay under their current owner. If a compatible Nginx installation is present, Hostlier reuses it. Otherwise the default is Caddy. The preview shows the runtime, proxy and proposed changes before approval. Use `init --yes` for noninteractive approval.
 
+New K3s installations use the checksum-pinned `v1.37.2+k3s1` release. On an existing Hostlier-managed K3s installation, the update preview lists each pinned release the installer will start. An update from `v1.34.11+k3s1` or `v1.34.12+k3s1` goes through `v1.34.13+k3s1`, `v1.35.10+k3s1`, and `v1.36.6+k3s1` before reaching `v1.37.2+k3s1`. The installer waits for the API server and node to be ready at every step. If an update is interrupted, run a fresh `init --dry-run` from the verified controller bundle before retrying.
+
 `--proxy caddy`, `--proxy nginx` (fresh standalone Nginx), and `--proxy nginx-existing` remain explicit overrides. Updates retain the recorded runtime, proxy and ownership, including Docker on existing Hostlier installations. To move Docker workloads and data to K3s, use the reviewed migration with backups and rollback. Controller logs are written to `/var/log/hostlier/hostlier.log`. Provider firewalls and DNS remain your responsibility. [Docker to K3s migration](../runtime-migration.md) · [Automatic detection and coexistence](../nginx-coexistence.md)
 
 The installer places `hostlier-controller` in `/usr/local/bin/` and starts

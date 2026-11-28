@@ -144,19 +144,19 @@ func inspectK3sVersion(ctx context.Context, p *Plan) {
 
 	// Inspect a cluster binary only when k3s is selected.
 	if o.Runtime == "k3s" {
-		v, ok := command(ctx, "/usr/local/bin/k3s", "--version")
-		fields := strings.Fields(v)
-		version := ""
-		// Read the version field only from a complete version response.
-		if len(fields) > 2 {
-			version = fields[2]
+		p.Snapshot.K3s = installedK3sBinary(ctx)
+		if !p.Snapshot.K3s.Installed && (migrationFileExists("/usr/local/bin/k3s") || migrationFileExists("/var/lib/rancher/k3s/server")) {
+			p.Errors = append(p.Errors, "Cannot verify the existing K3s version. Recover the matching K3s binary before continuing")
 		}
-		p.Snapshot.K3s = Component{Installed: ok, Version: version}
-		// Permit a patch upgrade only from the previous Hostlier-owned release.
-		if ok && (version != K3sVersion && version != previousK3sVersion || p.Snapshot.Installation == nil || p.Snapshot.Installation.Runtime != "k3s") {
+		if p.Snapshot.K3s.Installed && !ownedK3sInstallation(p) {
 			p.Errors = append(p.Errors, "Existing k3s installation cannot be safely adopted or upgraded")
 		}
 	}
+}
+
+func ownedK3sInstallation(p *Plan) bool {
+	_, known := k3sUpgradePath(p.Snapshot.K3s.Version)
+	return known && p.Snapshot.K3s.Installed && p.Snapshot.Installation != nil && p.Snapshot.Installation.Runtime == "k3s"
 }
 
 // inspectEdgeOwnership checks occupied public ports and existing Caddy configuration.
@@ -237,6 +237,9 @@ func platformProblem(release, goos, goarch string, options Options) string {
 
 // describeInstallation renders the inspected changes for interactive approval.
 func describeInstallation(p *Plan) {
+	if p.Runtime == "k3s" {
+		p.Changes = append(p.Changes, describeK3sVersion(p.Snapshot.K3s))
+	}
 	// The managed gateway must be visible as a two-layer routing change in the approval preview.
 	if p.Proxy == "nginx-gateway" {
 		describeNginxGateway(p)
@@ -262,7 +265,7 @@ func inspectPacketFiltering(ctx context.Context, p *Plan) {
 	nft, nftOK := command(ctx, "nft", "-j", "list", "ruleset")
 	iptables, iptablesOK := firewallView(ctx, "iptables")
 	ip6tables, ip6tablesOK := firewallView(ctx, "ip6tables")
-	ownedCluster := p.Snapshot.Installation != nil && p.Snapshot.Installation.Runtime == "k3s" && p.Snapshot.K3s.Version == K3sVersion
+	ownedCluster := ownedK3sInstallation(p)
 	ipv4Blocks := iptablesOK && iptablesInputFiltering(iptables, ownedCluster)
 	ipv6Blocks := ip6tablesOK && iptablesInputFiltering(ip6tables, ownedCluster)
 	// nft JSON omits xtables compatibility match details, including
@@ -319,11 +322,7 @@ func describeCaddyInstallation(p *Plan) {
 	}
 	// Expose cluster networking, firewall and storage limitations in the approval preview.
 	if o.Runtime == "k3s" {
-		clusterChange := "Install SHA256-verified " + K3sVersion + " with bundled containerd; no Docker installation"
-		if p.Snapshot.K3s.Installed && p.Snapshot.K3s.Version == previousK3sVersion {
-			clusterChange = "Upgrade owned k3s from " + previousK3sVersion + " to SHA256-verified " + K3sVersion + " and restart k3s.service"
-		}
-		p.Changes = append(p.Changes, clusterChange, "Disable Traefik/ServiceLB; single-node host-gw networking; restrict NodePorts to 127/8", "Persist owned IPv4/IPv6 TCP6443/10250 management firewall guards; permit host-local and 10.42/16 pod sources, preserve SSH and unrelated rules", "Start k3s.service and hostlier-k3s-firewall.service at boot; local-path PVC requested capacity has no enforced quota")
+		p.Changes = append(p.Changes, "Disable Traefik/ServiceLB; single-node host-gw networking; restrict NodePorts to 127/8", "Persist owned IPv4/IPv6 TCP6443/10250 management firewall guards; permit host-local and 10.42/16 pod sources, preserve SSH and unrelated rules", "Start k3s.service and hostlier-k3s-firewall.service at boot; local-path PVC requested capacity has no enforced quota")
 	}
 	p.Changes = append(p.Changes, "Create protected "+o.StateDir+", /etc/hostlier and /var/log/hostlier", "Configure HTTPS controller "+o.ControllerHostname+" with private loopback administration", "Install "+o.Executable+" and enable hostlier.service and caddy.service; start only Hostlier-managed runtimes", "Write /var/log/hostlier/hostlier.log with bounded rotation")
 	// Disclose the extra scoped pod rules required for an active UFW firewall.

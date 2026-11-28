@@ -138,7 +138,7 @@ func validateExistingDocker(version, id, osType string, security []string) error
 func describeSharedInstallation(p *Plan) {
 	// A new cluster keeps its own management guard while preserving unrelated firewall rules.
 	if p.Runtime == "k3s" {
-		p.Changes = append(p.Changes, "Install SHA256-verified "+K3sVersion+" and its owned k3s service and management firewall guard; disable Traefik/ServiceLB; retain the existing Nginx edge")
+		p.Changes = append(p.Changes, "Manage the Hostlier K3s service and its firewall guard with Traefik and ServiceLB disabled; retain the existing Nginx edge")
 	}
 	p.Changes = append(p.Changes,
 		describeRuntimeChoice(p),
@@ -147,7 +147,7 @@ func describeSharedInstallation(p *Plan) {
 		"Issue new Hostlier certificates through a dedicated per-host systemd job so Snap Certbot can run while hostlier.service keeps its protections",
 		"Read optional existing certificate references from /etc/hostlier/nginx-existing-tls.json without copying or renewing their keys",
 		"Install "+p.Executable+", protected controller state and hostlier.service; expose controller at https://"+p.ControllerHostname,
-		"Leave existing runtime/proxy package versions and service definitions and host firewall rules unchanged; install only missing selected runtime dependencies")
+		"Preserve operator-managed packages, service definitions and host firewall rules; install missing Hostlier runtime dependencies")
 }
 
 // sharedNginxConfiguration writes only Hostlier's service and renewal assets.

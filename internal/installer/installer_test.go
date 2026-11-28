@@ -2,8 +2,10 @@ package installer
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -207,16 +209,79 @@ func TestK3sAssetsPrivateAndPinned(t *testing.T) {
 		}
 	}
 	// Require a complete SHA-256 digest for every supported architecture.
-	for _, hash := range k3sChecksums {
-		// Reject incomplete release checksum pins.
-		if len(hash) != 64 {
-			t.Fatal("invalid pinned checksum")
+	for _, release := range k3sReleases {
+		for _, hash := range []string{release.amd64, release.arm64} {
+			if digest, err := hex.DecodeString(hash); err != nil || len(digest) != 32 {
+				t.Fatal("invalid pinned checksum for", release.version)
+			}
 		}
 	}
 	firewall := assets["/etc/hostlier/k3s-firewall.sh"]
 	// The management guard must preserve unrelated rules and host policies.
 	if strings.Contains(firewall, " -F") || strings.Contains(firewall, " -P") {
 		t.Fatal("firewall resets unrelated policy")
+	}
+}
+
+func TestK3sUpgradeChecksEachVersion(t *testing.T) {
+	for _, tc := range []struct {
+		name, installed, running, failReady string
+		want                                []string
+		fail                                bool
+	}{
+		{"all minor releases", "v1.34.12+k3s1", "v1.34.12+k3s1", "", []string{
+			"ready v1.34.12+k3s1", "install v1.34.13+k3s1", "restart", "ready v1.34.13+k3s1",
+			"install v1.35.10+k3s1", "restart", "ready v1.35.10+k3s1",
+			"install v1.36.6+k3s1", "restart", "ready v1.36.6+k3s1",
+			"install v1.37.2+k3s1", "restart", "ready v1.37.2+k3s1",
+		}, false},
+		{"resume interrupted restart", "v1.36.6+k3s1", "v1.35.10+k3s1", "", []string{
+			"restart", "ready v1.36.6+k3s1", "install v1.37.2+k3s1", "restart", "ready v1.37.2+k3s1",
+		}, false},
+		{"stop after first failed readiness", "v1.34.13+k3s1", "v1.34.13+k3s1", "v1.35.10+k3s1", []string{
+			"ready v1.34.13+k3s1", "install v1.35.10+k3s1", "restart", "ready v1.35.10+k3s1",
+		}, true},
+		{"reject version mismatch spanning two minors", "v1.36.6+k3s1", "v1.34.13+k3s1", "", nil, true},
+		{"keep current binary", K3sVersion, K3sVersion, "", []string{"ready " + K3sVersion}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var calls []string
+			err := upgradeK3s(tc.installed, tc.running, func(release k3sRelease) error {
+				calls = append(calls, "install "+release.version)
+				return nil
+			}, func() error {
+				calls = append(calls, "restart")
+				return nil
+			}, func(version string) error {
+				calls = append(calls, "ready "+version)
+				if version == tc.failReady {
+					return errors.New("node not ready")
+				}
+				return nil
+			})
+			if (err != nil) != tc.fail || !slices.Equal(calls, tc.want) {
+				t.Fatalf("upgrade called %v with error %v; want %v", calls, err, tc.want)
+			}
+		})
+	}
+}
+
+func TestK3sPreviewIncludesUpgradePathForEveryProxy(t *testing.T) {
+	for _, proxy := range []string{"caddy", "nginx", "nginx-existing", "nginx-gateway"} {
+		p := Plan{Options: Options{Runtime: "k3s", Proxy: proxy}}
+		p.Snapshot.K3s = Component{Installed: true, Version: "v1.34.11+k3s1"}
+		p.Snapshot.Installation = &Installation{Runtime: "k3s"}
+		describeInstallation(&p)
+		if !strings.Contains(p.Changes[0], "v1.34.11+k3s1 -> v1.34.13+k3s1 -> v1.35.10+k3s1 -> v1.36.6+k3s1 -> "+K3sVersion) {
+			t.Errorf("%s preview omitted the full upgrade path: %v", proxy, p.Changes)
+		}
+		if !ownedK3sInstallation(&p) {
+			t.Fatal("legacy managed version was rejected")
+		}
+		p.Snapshot.Installation = &Installation{Runtime: "docker"}
+		if ownedK3sInstallation(&p) {
+			t.Fatal("managed version number alone authorized an external cluster")
+		}
 	}
 }
 

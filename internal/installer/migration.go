@@ -111,7 +111,7 @@ func InstallMigrationK3s(ctx context.Context, stateDir string, reuse bool, polic
 			return err
 		}
 		// Preserve failure before advancing to the next external-effect boundary.
-		if err := waitK3sReady(ctx); err != nil {
+		if err := waitK3sReady(ctx, K3sVersion); err != nil {
 			return err
 		}
 	}
